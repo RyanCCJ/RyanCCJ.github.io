@@ -1,0 +1,77 @@
+---
+title: 'Python GC 與 rpy2 的坑'
+date: '2024-04-10'
+tags: ['Python', 'R']
+draft: true
+summary: 'Pyhton Garbage Collector 會自動清理廢棄資源，但是什麼時候算是廢棄？若資源沒有隨著程式結束一起關閉會發生什麼事？'
+---
+
+這陣子在修改 Github 專案上的一個工具，意外發現一個坑。理論上，Python 會自動做 garbage collect，不需要像 C 那樣手動釋放記憶體。然而總有些例外，最常見就是 file Object，或是某些持續連接的外部資源，如 database。
+
+平時我們可能會直接使用 `close()` 關閉資源，或是用下面的方式透過 `with` 來自動關閉資源：
+```python
+with open('file.txt', 'r') as f:
+   lines = f.readlines()
+```
+
+Garbage collector 除了會在退出 with 時清理資源，還會在 reference count = 0（即沒有任何人在用這個變數）和程式結束時釋放資源，這其中甚至包含 file object 與外部連線資源。
+
+這次遇到的問題即是在程式結束時，會意外噴出一堆 Attribute Error。最神奇的是這個 error 不常發生，噴出的時機與噴出的量（error數量）都難以捉摸。雖不影響程式本身執行，但看了就頭痛。
+![Error Msg](/static/images/2024/error-message.png)
+
+從 error message 中可以看出，它在清除 rpy2 套件中的 SexpCapsule object 時無法正確釋放某個 R_ReleaseObject。補充說明一下，rpy2 是一個可以在 Python 內運行 R 語言的套件，但並不是真的可以模擬 R，而是將程式與資料包裝起來與系統內的 R 互動，所以還是需要安裝 r-base。以下是我的執行環境：
+- Python 3.5.2
+- rpy2 3.0.5
+- R version 4.3.2
+
+打開發生錯誤的套件 `rpy2/rinterface_lib/_rinterface_capi.py`，可以看到很酷的說明：
+```python:_rinterface_capi.py
+ 58 def _release(cdata):
+ 59     addr = int(ffi.cast('uintptr_t', cdata))
+ 60     count = _R_PRESERVED[addr] - 1
+ 61     if count == 0:
+ 62         del(_R_PRESERVED[addr])
+ 63         openrlib.rlib.R_ReleaseObject(cdata)
+ 64     else:
+ 65         _R_PRESERVED[addr] = count
+ 
+ ...
+
+ 91 class SexpCapsule(UnmanagedSexpCapsule):
+ 92 
+ 93     __slots__ = ('_cdata', )
+ 94 
+ 95     def __init__(self, cdata):
+ 96         assert is_cdata_sexp(cdata)
+ 97         _preserve(cdata)
+ 98         self._cdata = cdata
+ 99 
+100     def __del__(self):
+101         try:
+102             _release(self._cdata)
+103         except Exception as e:
+104             # _release can be None while capsules when Python is terminating
+105             # and R is being shutdown, resulting in a race condition when
+106             # freeing python objects.
+107             if _release is None:
+108                 pass
+109             else:
+110                 raise e
+```
+
+竟然什麼都不做，就有機會發生 **race condition**！這到底有多扯呢？我只是 `import rpy2`，rpy2 就會建立 SexpCapsule object ，為 R 的互動做準備，並於程式結束時機率出現這個 bug。
+
+而且 rpy2 早就知道有這個問題了，看來還沒想好怎麼解。繞了一圈，除非我拆開來細細品味 rpy2 到底怎麼做的，不然很難解掉這個 bug。
+
+回頭看一下 rpy2 的文件 [Memory management and garbage collection](https://rpy2.github.io/doc/v3.0.x/html/rinterface-memorymanagement.html)，確實有提到它使用了自己的 reference counting system，讓其免於 Python GC 的命運。
+> The tracking of an R object differs from Python as it does not involve reference counting. It is using at attribute NAMED, and only considers for collection objects that are not preserved by being contained in an other R object.
+
+其結果就是 R 斷線時 Python 無法正確釋放記憶體，概率性跳出 error。那到底 R 什麼時候會斷線？以上面的例子，就是當 Python 程式結束時，R object 尚未正確關閉，就無法清空記憶體。也就是說，只要正確關閉 R object 就可以了。  
+
+問題是我的程式根本連 R 都還沒用啊，光是 `import rpy2` 就踩到陷阱了，更不要說透過 `del` 或 `gc` 來手動釋放某個尚未定義的 object。
+
+後來嘗試將原本 Python module 最上方 import 的區塊做點調整，把 `import rpy2` 獨立出來放進某個 function，這樣每次要使用 rpy2 時都不會在 global 執行。雖然每次都要重新 import，但可以確保退出時正常關閉並清空記憶體，不影響主程式運行。
+
+一試之下竟然真的不噴 error，暫時歇了口氣。畢竟是蠻久以前的 Python 與 rpy2 版本，不知道後續問題解決了沒有。
+
+這次 bug 搞了很久，但解法意外很簡單。謹記。
