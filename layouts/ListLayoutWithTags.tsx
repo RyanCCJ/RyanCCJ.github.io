@@ -37,7 +37,10 @@ function Pagination({ totalPages, currentPage }: PaginationProps) {
           </button>
         )}
         {prevPage && (
-          <Link href={currentPage - 1 === 1 ? `/${basePath}/` : `/${basePath}/page/${currentPage - 1}`} rel="prev">
+          <Link
+            href={currentPage - 1 === 1 ? `/${basePath}/` : `/${basePath}/page/${currentPage - 1}`}
+            rel="prev"
+          >
             Previous
           </Link>
         )}
@@ -59,7 +62,12 @@ function Pagination({ totalPages, currentPage }: PaginationProps) {
   )
 }
 
-export default function ListLayoutWithTags({ posts, title, initialDisplayPosts = [], pagination }: ListLayoutProps) {
+export default function ListLayoutWithTags({
+  posts,
+  title,
+  initialDisplayPosts = [],
+  pagination,
+}: ListLayoutProps) {
   const pathname = usePathname()
   const tagCounts = tagData as Record<string, number>
   const tagKeys = Object.keys(tagCounts)
@@ -131,9 +139,13 @@ export default function ListLayoutWithTags({ posts, title, initialDisplayPosts =
                               {title}
                             </Link>
                           </h2>
-                          <div className="flex flex-wrap">{tags?.map((tag) => <Tag key={tag} text={tag} />)}</div>
+                          <div className="flex flex-wrap">
+                            {tags?.map((tag) => <Tag key={tag} text={tag} />)}
+                          </div>
                         </div>
-                        <div className="prose max-w-none text-gray-500 dark:text-gray-400">{summary}</div>
+                        <div className="prose max-w-none text-gray-500 dark:text-gray-400">
+                          {summary}
+                        </div>
                       </div>
                     </article>
                   </li>
