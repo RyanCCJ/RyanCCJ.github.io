@@ -19,8 +19,8 @@ const projectsData: Project[] = [
     description: `Since the advent of NGS sequencing technology, research in the field of RNA has been thriving. 
     We have published a series of papers exploring the relationship of small RNA binding and 
     introducing novel perspectives on CLASH and iCLIP experiments.`,
-    imgSrc: '/static/images/project/RNA.jpg',
-    href: '/blog/the-time-machine',
+    imgSrc: '/static/images/2024/RNAseq-Analysis-Toolkit/RNA.jpg',
+    href: '/blog/2024/RNAseq-Analysis-Toolkit',
   },
   {
     title: 'Google Developer Student Club',
@@ -28,7 +28,7 @@ const projectsData: Project[] = [
     As core members of the NLP Group at NCKU, our main goal is to promote the use of natural language processing in 
     TensorFlow and PyTorch. We aim to create applications such as document summarization and ChatBot.`,
     imgSrc: '/static/images/project/GDSC.jpg',
-    href: '/blog/the-time-machine',
+    href: '/blog/2022/GDSC',
   },
   {
     title: 'Seed Project: Canada Alpine Training',
@@ -36,7 +36,7 @@ const projectsData: Project[] = [
     including snow, rock, and ice climbing skills. Thanks to the sponsorship and selection by Taiwan Climbing 
     & Mountaineering Alliance, our horizons are gradually expanding.`,
     imgSrc: '/static/images/project/Canada.jpg',
-    href: 'https://www.google.com',
+    href: '/blog/2023/seed-project',
   },
   {
     title: 'Industry-Academia Collaboration: Internal Website Infrastructure',
@@ -44,7 +44,7 @@ const projectsData: Project[] = [
     moving its AWS website to servers. It involves planning several Linux servers for load balancing and 
     database read-write separation, as well as redesigning the website's front-end and back-end architecture.`,
     imgSrc: '/static/images/project/web_infra.jpg',
-    href: '/blog/the-time-machine',
+    href: '/blog/2022/web-infra',
   },
   {
     title: 'VBA Macros Attack and Defence',
@@ -52,7 +52,7 @@ const projectsData: Project[] = [
     However, macros can pose significant security risks. This project will explore and implement potential 
     hacking techniques and defense mechanisms.`,
     imgSrc: '/static/images/project/hacker.jpg',
-    href: '/blog/the-time-machine',
+    href: '/blog/2022/VBA-macros-attack',
   },
   {
     title: 'COVID-19 Image Recognition Application',
@@ -60,7 +60,7 @@ const projectsData: Project[] = [
     technology to assess the likelihood of illness from CT scans. Additionally, we are conducting some 
     interesting analyses related to whether people are correctly wearing masks based on facial recognition.`,
     imgSrc: '/static/images/project/COVID-19.jpg',
-    href: '/blog/the-time-machine',
+    href: '/blog/2022/image-recognition',
   },
   {
     title: 'Smart Dumbbell Chip Development',
@@ -69,14 +69,14 @@ const projectsData: Project[] = [
     are correct. This project was part of the 'Dreams Come True' initiative and we successfully presented 
     our paper in Indonesia.`,
     imgSrc: '/static/images/project/dumbbell.png',
-    href: '/blog/the-time-machine',
+    href: '/blog/2021/smart-dumbbell',
   },
   {
     title: 'JAM: Integrated Club Management Platform',
     description: `Based on the needs of our club management, we wanted a platform that could integrate a 
     shared calendar, cloud storage, photo albums, and a voting system in one place. That's how JAM was born.`,
     imgSrc: '/static/images/project/JAM.png',
-    href: '/blog/the-time-machine',
+    href: '/blog/2021/JAM',
   },
   {
     title: 'Guide and Tour Commentary System',
@@ -84,7 +84,7 @@ const projectsData: Project[] = [
     services for the surroundings of Deqingxi. It allows users to navigate through the past and present maps, 
     interact with physical guides, and leave comments.`,
     imgSrc: '/static/images/project/Deqingxi.png',
-    href: '/blog/the-time-machine',
+    href: '/blog/2021/Find-Deqingxi',
   },
   {
     title: 'Resonant Circuits for Wireless Power Transfer',
@@ -93,7 +93,7 @@ const projectsData: Project[] = [
     encompasses the derivation of relevant formulas, coil model design, and analysis, with a particular 
     focus on the phenomenon of frequency splitting.`,
     imgSrc: '/static/images/project/WPT.jpg',
-    href: '/blog/the-time-machine',
+    href: '/blog/2021/resonant-circuits-for-WPT',
   },
   {
     title: 'Buck Converter for Energy Harvesting',
@@ -101,14 +101,14 @@ const projectsData: Project[] = [
     To address the shortcomings of traditional linear converters, the utilization of switch circuits and 
     energy storage components for voltage conversion is employed to reduce energy loss. Additionally, there is a focus on minimizing noise levels in component design.`,
     imgSrc: '/static/images/project/solar_panel.png',
-    href: '/blog/the-time-machine',
+    href: '/blog/2021/buck-converter',
   },
   {
     title: 'Poker Card Big Two Playing Robot',
     description: `Feel like you're not good at playing Big Two? Give this card-playing robot a try. 
     It might not play better than you, but at least it can give you a break.`,
     imgSrc: '/static/images/project/Big2.png',
-    href: '/blog/the-time-machine',
+    href: '/blog/2021/Big-Two',
   },
   {
     title: 'Lightweight RPG Adventure Game',

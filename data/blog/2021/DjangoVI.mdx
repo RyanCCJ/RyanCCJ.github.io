@@ -1,0 +1,252 @@
+---
+title: 'Django (六) 用戶登入與社群應用'
+date: '2021-07-31'
+tags: ['程式','Python']
+draft: false
+summary: 'Django 系列文：以 Session 機制實作一般帳號登入，以及第三方社群網站的登入方法'
+---
+
+## 目錄
+
+本篇是 Django 系列文的第六章，其他內容請參考以下連結：
+1. [Django (一) 基本介紹與環境架設](https://ryanccj.github.io/blog/2021/DjangoI)
+2. [Django (二) 模組功能與使用範例](https://ryanccj.github.io/blog/2021/DjangoII)
+3. [Django (三) 網頁模版與網址設計](https://ryanccj.github.io/blog/2021/DjangoIII)
+4. [Django (四) 資料庫與模型使用](https://ryanccj.github.io/blog/2021/DjangoIV)
+5. [Django (五) 表單設計與整合](https://ryanccj.github.io/blog/2021/DjangoV)
+6. [Django (六) 用戶登入與社群應用](https://ryanccj.github.io/blog/2021/DjangoVI)
+7. [Django (七) 網站部署與內容管理](https://ryanccj.github.io/blog/2021/DjangoVII)
+
+## 一般帳號登入
+
+### Session 介紹
+
+回想一下前面的內容，我們可以發現每次上網其實都是一次獨立事件。
+使用者透過網址 (url) 連到伺服器， 伺服器會回傳渲染好的 html 網頁；若使用者透過表單傳送資料，伺服器也進行相應的動作。
+這一來一往的互動，其實是不受時間、地點、用戶是誰而限制，究其原因，是因為 http 本身是一個無狀態 (stateless) 的通訊協定。
+我們希望在任何時候，用戶都能順暢瀏覽我們架的網站，這似乎是一個合理的設計。
+
+然而，某些時候就不是如此了。以這次的的部落格寫作平台為例，我們希望有「用戶登入」的功能，才不會隨意濫用他人的名義發文、刪文。
+如果我們用之前提過的表單功能，當然可以簡單做出一個用戶登入的機制；然而，因為 http 是 stateless ，只要用戶關掉瀏覽器後，他就必須重新登入帳號。
+如果作為一個寫作平台，可能只是稍微有點惱人，如果今天是一個社群平台，那就相當不方便了。
+我們希望有某種方式可以讓伺服器自動認出使用者，不需讓使用者一直頻繁操作，這就必須提到 Session 。
+
+Session 是什麼？就是一種讓 http request 變成 stateful 的機制，它的實作方法有很多種，最常見的就是利用 Cookie。
+所謂 Cookie，就是在瀏覽器 (browser) 本身記錄一些用戶資訊，例如「User_ID: A1234」。
+每次瀏覽器瀏覽網站（發起 http request ），就會帶著它的 Cookie 一起訪問伺服器。
+當伺服器看到「User_ID: A1234」，就會自動辨認出使用者，無需我們自己輸入資料，這就是 stateful request 。
+
+這就是為什麼有人在公用電腦忘記登出 Facebook 時，我們可以用他的帳號亂發廢文。
+因為瀏覽器本身已經將用戶資料紀錄在 Cookie 中，尚未清除。
+
+### Session 使用
+
+接著我們來利用 Session 實作用戶登入功能。首先透過 Django form 在 forms.py 製作登入表單：
+``` python
+class LoginForm(forms.Form):
+    username = forms.CharField(label='帳號', max_length=20)
+    password = forms.CharField(label='密碼', max_length=20, widget=forms.PasswordInput())
+```
+
+然後在 views.py 中加入 login() 、 logout() 函式：
+``` python
+from django.contrib.sessions.models import Session
+from django.contrib import messages
+
+...
+
+def login(request):
+    if request.method == 'POST':
+        login_form = forms.LoginForm(request.POST)
+        if login_form.is_valid():
+            login_name = request.POST['username'].strip()
+            login_pass = request.POST['password']
+            try:
+                user = models.User.objects.get(name = login_name)
+                if user.password == login_pass:
+                    request.session['user_name'] = user.name #<--注意這行！
+                    messages.add_message(request, messages.SUCCESS, ('登入成功！歡迎：'+user.nickname))
+                    return redirect('/')
+                else:
+                    message = '密碼錯誤，請再檢查一次'
+            except:
+                message = '找不到使用者'
+        else:
+            message = '請正確填寫每一個欄位'
+    else:
+        login_form = forms.LoginForm()    
+    return render(request, 'login.html', locals())
+
+def logout(request):
+    if 'user_name' in request.session:
+        Session.objects.all().delete()
+        messages.add_message(request, messages.SUCCESS, '登出成功！')
+    return redirect('/')
+```
+請注意，logout() 函式必須先引入 Djnago Session 模組。另外，我們也引入了 Django messages，方便我們快速製作跨網頁的訊息。
+Django messages 有 DEBUG, INFO, SUCCESS, WARNING, ERROR 等不同預設層級，相關使用可以參考這份 [文件](https://docs.djangoproject.com/en/3.2/ref/contrib/messages/)。
+
+接著，我們新增一個頁面 login.html：
+``` html
+<!-- login.html -->
+{% extends 'base.html' %}
+{% block title %} 登入 {% endblock %}
+{% block sidebar %} 
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header fs-5 fw-bold">
+        用戶登入
+    </div>
+    {% if message %} 
+    <div class="alert alert-warning">{{ message }}</div>
+    {% endif %} 
+    <div class='card-body'>
+        <form method="POST">
+            {% csrf_token %}
+            <table>
+                {{ login_form.as_table }}
+            </table>
+            <br>
+            <input type="submit" value="登入" class="btn btn-outline-secondary me-2">
+            <input type="reset" value="清除" class="btn btn-outline-danger">
+        </form> 
+    </div>
+</div>
+{% endblock %}
+```
+同時，我們希望登入成功後，除了跳回主頁，還能在主頁顯示「登入成功！」的訊息與「個人頁面」、「登出」等按鈕，就需要回頭做一些調整。
+
+我們先到 sidebar1.html，加上剛剛的 messages：
+``` html
+<!-- sidebar1.html -->
+{% for message in messages %} 
+    <div class="alert alert-{{message.tags}}">{{ message }}</div>
+{% endfor %}
+...
+```
+接著我們到 header.html 中加入用戶登入、登出的判斷：
+
+``` html
+<!-- header.html -->
+...
+{% if username %}
+<a href="/user/" role="button">個人頁面</a>
+<a href="/logout/" role="button">登出</a>
+{% else %}
+<a href="/login/" role="button">登入</a>
+{% endif %}
+<a href="/admin/">後台管理</a>
+```
+這邊我們利用 username 這個變數來判斷是否登入。請注意，header.html 是被 base.html 引入（請參考第三章），所以其他引入 base.html 的網頁都會讀入這個判斷式。
+
+接著回到 views.py ，新增以下函數：
+``` python
+def user_login(request):
+    username = ''
+    if 'user_name' in request.session:
+        username = request.session['user_name']
+    return username
+```
+然後在 views.py 中的 index(), showpost(), user() 中都加入剛剛的函數：
+``` python
+def function(request, ...):
+    username = user_login(request) #<--加入這行
+    ...
+```
+
+這樣就可以順利從 Session 中讀取 user_name ，顯示在 header.html 的選單中。
+最後，我們在 urls.py 中的 urlpatterns 加入這兩行：：
+``` python
+path('login/', views.login),
+path('logout/', views.logout),
+```
+至此，「登入」與「登出」功能就完成了，成果如下：
+
+**( login.html )** http://localhost:8000/login/
+
+![](/static/images/2021/Django/login.png)
+
+**( index.html )** http://localhost:8000/
+
+![](/static/images/2021/Django/login-success.jpg)
+<br/>
+
+**補充：** 我們也可以使用 Django Admin 介面預設的「認證與授權」中「使用者」功能來進行用戶登入與註冊，只要先在 views.py 中輸入：
+``` pyhton
+from django.contrib import auth
+```
+就可以直接建立 auth.models.User.objects，然後透過 `auth.authenticate()` 來登入帳戶。
+不過 Django 預設的 User object 欄位只有 username, password, email, first_name, last_name ，如果想增加其他用戶訊息，還是必須建立其他 model 才行，詳情可以參考這份 [文件](https://docs.djangoproject.com/en/3.2/topics/auth/default/#user-objects)。
+
+## 社群網站登入
+
+> 請注意，社群網站的更新速度很快，以下的教學可能沒幾年就不適用，請自行參閱相關說明文件。
+
+有了 Django forms 與 models ，我們已經可以輕易做出網站註冊功能。
+然而現在許多網站都會額外提供第三方網站（像是 Google、Facebook）的登入機制，大幅降低使用者註冊帳號的門檻。
+
+此處以最常見的 Google 登入為例，我們首先至 [Google API](https://console.cloud.google.com/apis/) 創建一個新的專案。
+接著進入「憑證」頁面，點選上方的「+ 建立憑證」，選擇「OAuth 用戶端 ID」，建立一個新的登入服務。
+
+![](/static/images/2021/Django/Google-OAuth.png)
+
+在「已授權的 JavaScript 來源」輸入網址，以這個測試專案為例，直接輸入 `http://localhost:8000` 即可；在「已授權的重新導向 URI」則填入我們等下會用到的套件 django-allauth 的預設回傳網址 `http://localhost:8000/accounts/google/login/callback/` 。
+完成後會產生用戶端「編號 ID」與「密鑰 secret」，將這兩個資料記錄下來供後續使用。
+
+<img src='/static/images/2021/Django/Google-OAuth-setting.png' width='450'/>
+
+接著我們安裝 django-allauth 套件：
+``` bash
+pip install django-allauth
+```
+
+然後在 settings.py 中將剛剛的套件加入 APP 與 middleware 中，並增加相關設定：
+``` python
+INSTALLED_APPS = [
+    ...
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+]
+
+MIDDLEWARE = [
+    ...
+    'allauth.account.middleware.AccountMiddleware',
+]
+
+SITE_ID = 1
+SOCIALACCOUNT_LOGIN_ON_GET = True # <-- 登入時直接跳轉第三方登入畫面
+LOGIN_REDIRECT_URL = '/' # <-- 登入完成後重新導向的路徑
+```
+當然，我們也可以自行加上 Facebook、Twitter、Github 等其他第三方網站，詳情可以參考 [官方文件](https://docs.allauth.org/en/latest/socialaccount/index.html)。
+
+接著我們在 urls.py 中的 urlpatterns 加入這行：
+``` python
+path('accounts/', include('allauth.urls'))
+```
+
+當我們執行過 makemigrations、migrate，重啟 server 後就可以在 admin 介面中看到許多新東西。
+點選「網站」的變更按鈕，修改 `example.com` 為目前預設的 `localhost:8000`：
+![](/static/images/2021/Django/admin-site.png)
+
+然後新增「社群應用程式」，選擇提供者為 Google，將剛剛得到的編號 (client ID) 與密鑰 (secret key) 填入，並把 `localhost:8000` 加入下面的可用網站中，Provider ID 與 Key 則可以留空：
+![](/static/images/2021/Django/admin-social-app.png)
+
+接著我們修改 login.html，載入模組並新增 Google 登入按鈕：
+``` python
+{% load socialaccount %}
+...
+<a href="{% provider_login_url 'google' %}">使用 Google 帳戶登入</a>
+```
+
+回到登入頁面 [http://localhost:8000/login/](http://localhost:8000/login/)，可以看到多了一個第三方登入按鈕。
+點擊此按鈕會自動跳轉至 Google 登入頁面，登入完成後會以 gmail 帳戶登入並跳轉至主畫面。
+
+![](/static/images/2021/Django/Google-account.png)
+![](/static/images/2021/Django/Google-account2.png)
+
+若要連接社群帳戶與一般帳戶之間的關係，可以去 models 裡進一步設定，在此便不贅述，可以參考第四章的內容。

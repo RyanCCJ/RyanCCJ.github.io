@@ -1,0 +1,393 @@
+---
+title: 'Django (四) 資料庫與模型使用'
+date: '2021-07-21'
+tags: ['程式','Python']
+draft: false
+summary: 'Django 系列文：介紹資料庫的基本概念和使用方法，包含 Model 的設計和實際運用'
+---
+
+## 目錄
+
+本篇是 Django 系列文的第四章，其他內容請參考以下連結：
+1. [Django (一) 基本介紹與環境架設](https://ryanccj.github.io/blog/2021/DjangoI)
+2. [Django (二) 模組功能與使用範例](https://ryanccj.github.io/blog/2021/DjangoII)
+3. [Django (三) 網頁模版與網址設計](https://ryanccj.github.io/blog/2021/DjangoIII)
+4. [Django (四) 資料庫與模型使用](https://ryanccj.github.io/blog/2021/DjangoIV)
+5. [Django (五) 表單設計與整合](https://ryanccj.github.io/blog/2021/DjangoV)
+6. [Django (六) 用戶登入與社群應用](https://ryanccj.github.io/blog/2021/DjangoVI)
+7. [Django (七) 網站部署與內容管理](https://ryanccj.github.io/blog/2021/DjangoVII)
+
+## 資料庫簡介
+### 前言
+想像一下，如果今天要在資料夾內找一個檔案，我們可能會選擇直接點開資料夾，然後一個個慢慢找。如果今天檔案很多 (也許幾十筆)，我們可能會需要更多資料夾來分類、整理我們的檔案。
+如果今天檔案真的非常非常多 (也許幾十萬筆)，我們可能會想透過某種更有效率的方式 (例如搜尋名字、種類、tags ) 來取得我們要的資料。這時候，資料庫將會大大改善我們的搜尋效率。
+
+資料庫 (Database, DB) 是一種系統化儲存資料的方法，他需要配合資料管理系統 (Database Management System, DBMS) 來存取資料，並利用結構化查詢語言 (Structured Query Language, SQL) 來快速搜尋我們要的資料。
+
+![](/static/images/2021/Django/DBMS.png)
+
+在 Django 中預設的資料庫是 SQLite，相關資料都儲存在 db.sqlite3 中。我們可以利用 Django 內建的 admin 介面來進行資料增減等簡單操作，也可以透過第三方應用程式 ( 例如 [DB Browser](https://sqlitebrowser.org/) ) 來進一步做到如匯入 csv 檔案、資料欄位設定、主值設定等進階操作。
+
+![](/static/images/2021/Django/DB-browser.png)
+
+### 使用 MySQL
+如果我們要開發大型專案，並且多人共用同一個資料庫，通常會使用 MySQL 等獨立資料庫伺服器來取代預設的 SQLite。
+以下會介紹如何在 Linux 中安裝與使用 MySQL，但對於一般小型專案與練習並非必要。
+
+首先在資料庫伺服器下載 MySQL Server 與跟 Python 溝通的工具：
+``` bash
+$ apt install mysql-server
+$ apt install python3-dev libmysqlclient-dev
+$ mysql_secure_installation
+```
+接著在你的專案伺服器安裝 MySQL 客戶端：
+```bash
+$ pip install mysqlclient
+```
+
+然後修改 settings.py 中關於 database 的設定如下:
+``` python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': '資料庫名稱',
+        'USER': '連接的帳號',
+        'PASSWORD': '密碼',
+        'HOST': 'IP位置',
+        'PORT': 'Port值',
+        'OPTIONs': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+    }
+}
+```
+
+這樣就可以順利轉移連線的資料庫。如果要將現有資料搬移過去，則必須使用 SQL 指令來匯出與匯入資料表，或是透過第三方應用程式，例如 phpMyAdmin，來進一步對資料表進行操作。
+
+除了自己架設 MySQL 伺服器外，也可以使用其他商用雲端 SQL 伺服器，例如 Google Cloud Platform SQL、Amazon RDS 等等，降低自行維護伺服器的負擔。
+
+##  Model 說明
+### 前言
+一般資料庫是使用 SQL 指令來存取資料，但在 Django 中是使用 Object Relational Mapping (ORM) 方式來存取資料。
+透過建立抽象化的 model ，將資料視為一種「物件」，就可以用 python 的方式來處理資料，而不用擔心底層的資料設定。
+
+使用 model 時，我們必須先進入 models.py 中設計每個資料表的 class，再利用以下指令把虛擬層的 class 寫入真的資料庫 ( SQLite ) 中：
+``` bash
+$ python manage.py makemigrations #產生 class 描述檔案，位置在 app/migrations 中
+$ python manage.py migrate #根據描述檔來變更資料庫設定
+```
+
+如果要讓 Django 預設的 admin 介面能夠讀取資料庫 ( 實際上是讀取虛擬層的 model )，就必須另外在 admin.py 中啟用剛剛設計好的 model。
+```python
+from <your_app> import models
+
+admin.site.register(models.<your_class>)
+...
+```
+
+如果要讓 views.py 順利讀取資料庫，除了透過 SQL 語法，也可以直接透過 ORM 的方式來進行操作，相關使用方式會在後文進一步作說明。
+
+### 常用資料格式
+
+Model 常用的資料格式 (Field) 與參數可以參考 [官方文件](https://docs.djangoproject.com/en/3.2/ref/models/fields/)。
+
+| 格式 | 參數 | 說明 |
+| ---- | ---- | ---- |
+| BooleanField |  | 布林值，只有True、False |
+| CharField | max_length | 單行資料的字串 |
+| DateField, DateTimeField | auto_now：每次儲存時自動更新時間 auto_now_add：第一次儲存時更新時間 | 日期格式 |
+| DecimalField | max_digits：最大位數 decimal_places：小數位數 | 定點小數 |
+| EmailField | max_length | 電子郵件格式 |
+| FloatField | | 浮點數格式 |
+| IntegerField | | 整數格式 |
+| TextField | | 長文資料，用於 html textarea |
+| URLField | max_length | 類似 CharField |
+| FileField | max_length, upload_to：路徑 ||
+| ImageField | upload_to, height_field, width_field, max_length | |
+
+### 常用參數
+
+| 參數 | 說明 |
+| ---- | ---- |
+| null | 是否接受空值，預設是 False |
+| blank | 是否接受空白內容，預設是 False |
+| choices | 欄位候選值，包含儲存內容與選項名稱 |
+| default | 預設值 |
+| primary_key | 設定為資料表為主鍵，預設是 False |
+| verbose_name | admin 介面的欄位名稱 |
+
+### 資料關係格式
+Model 有提供定義資料間關係的語法，可以將此模型指向另一個模型的主鍵 (primary key) 。如果沒有特別定義主鍵， Django 會在產生模型時自行增加一個 id 作為主鍵。
+
+| 格式 | 說明 |
+| ---- | ---- |
+| ForeignKey (to, on_delete) | many-to-one relationship, 可以參考後文的 Author 用法 |
+| ManyToManyField (to) | 可以參考後文的 Tags 用法 |
+|  OneToOneField (to, on_delete, parent_link=False) ||
+
+當我們想刪除上層 (parent) 資料時，必須定義如何處理下層 (child) 的資料，這時可以用 on_delete 參數，例如 `on_delete=models.CASCADE` 代表一併刪除下層元素。其他常用語法如下：
+- models.PROTECT：禁止刪除，產生 exception
+- models.SET_NULL：設定成 null ，但要先讓 null=True
+- models.SET_DEFAULT：設定成 default ，但要先設定預設值
+- models.DO_NOTHING：不處理
+
+### 資料存取方式
+
+當我們要存取資料時，只要使用 ORM 語法即可，如以下範例：
+``` python
+posts = Post.objects.all() #取得此物件全部元素
+```
+其他常用常用函式如下：
+
+| 名稱            | 說明                                         |
+| --------------- | -------------------------------------------- |
+| all()           | 回傳全部值                                   |
+| get()           | 回傳 **唯一值**，建議配合 try/except |
+| filter()        | 回傳符合條件的值，若無自動回傳空值           |
+| exclude()       | 回傳不符合條件的值                           |
+| first(), last() | 回傳第一、最後的值                           |
+| exists()        | 判斷是否存在 |
+| create() | 建立一欄資料 |
+| save() | 儲存資料進資料庫 |
+| delete()        | 刪除資料                                       |
+| oreder_by()     | 將回傳資料排序，加負號則逆序                 |
+
+## Model 規劃與使用
+
+還記得我們在第二章曾經建立過貼文的模型嗎？接下來，我們要重新規劃這個網站的資料庫，並確定資料內容與細節。
+
+- 用戶 (User)：帳號、密碼、暱稱
+- 貼文 (Post)：作者、文章標題、封面相片、內文、分類、標籤、時間
+- 留言 (Comment)：作者、原始貼文、留言內容、時間
+
+接著，將上述模型寫入 models.py：
+``` python
+from django.db import models
+
+class User(models.Model):
+    name = models.CharField(max_length=20)
+    nickname = models.CharField(max_length=20)
+    password = models.CharField(max_length=20)
+
+    def __str__(self):
+        return self.name
+
+class Tag(models.Model):
+    name = models.CharField(max_length=20)
+    
+    def __str__(self):
+        return self.name
+
+class Post(models.Model):
+    Categories = [
+        ('Life', '生活'),
+        ('Travel', '旅遊'),
+        ('Office', '職場'),
+        ('Sport', '運動'),
+        ('Tech', '科技'),
+        ('Other', '其他')
+    ]
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    title = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True, allow_unicode=True)
+    image = models.ImageField(blank=True, default='default.jpg')
+    content = models.TextField(blank=True)
+    category = models.CharField(max_length=10, choices=Categories)
+    tags = models.ManyToManyField(Tag)
+    date = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ('-date',)
+
+    def __str__(self):
+        return "({}) {}".format(self.author, self.title)
+
+class Comment(models.Model):
+     author = models.ForeignKey(User, on_delete=models.CASCADE)
+     post = models.ForeignKey(Post, on_delete=models.CASCADE)
+     content = models.TextField(blank=True)
+     date = models.DateTimeField(auto_now=True)
+
+     def __str__(self):
+        return "({}) comment on {}".format(self.author, self.post)
+```
+我們將 Post 與 Comment 都加上對應的 ForeignKey Field。
+
+`image = models.ImageField()` 的部分，我們讓用戶可以自行選擇是否新增封面相片，同時設定一張預設圖片 default.jpg 到 mysite/media 中。
+此外，為了讓用戶順利上傳圖片到這個資料夾，需要另外作一些設定。請加入以下兩行到 settings.py :
+``` python
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+```
+
+然後安裝這個套件：
+```bash
+$ pip install Pillow
+```
+
+最後，如果我們想在 Django 後台管理資料庫，就必須將相應的 models 寫入 admin.py：
+``` python
+from django.contrib import admin
+from blog import models
+
+class PostAdmin(admin.ModelAdmin):
+    list_display = ('title','author','category','date')
+    ordering = ('-date',)
+
+admin.site.register(models.User)
+admin.site.register(models.Tag)
+admin.site.register(models.Post, PostAdmin)
+admin.site.register(models.Comment)
+```
+在 admin 中，如果不特別加上顯示的方法 ModelAdmin() ，就會直接顯示 \_\_str__() 。
+設定完後，別忘記輸入以下指令，確保資料庫更新到最新的 models 架構：
+``` bash
+$ python manage.py makemigrations
+$ python manage.py migrate
+```
+這時可能會出現以下 Error ，這是因為舊 model 在更新時不知道該怎麼處理新的資料格式。
+可以根據提示給一個預設值，或是在資料中加入參數 `default=None` ，解決預設值的問題。
+
+```
+You are trying to add a non-nullable field 'Author' to post without a default; we can't do that (the database needs something to populate existing rows).
+Please select a fix:
+ 1) Provide a one-off default now (will be set on all existing rows with a null value for this column)
+ 2) Quit, and let me add a default in models.py
+```
+ 
+若是真的解決不了，將整個資料庫 db.sqlite3 刪除重建也不失為一種更簡單的方法。若採取這種方式，需要重新設定 superuser。
+都完成後，重啟 server 應該就可以順利進入後台編輯剛剛的資料模型。
+
+這裡我們先新增幾個 user 與 tag ，上傳想要的封面照片，再使用廢文產生器生成相應的貼文。完成後結果如下圖。
+
+![](/static/images/2021/Django/add-post.png)
+
+我們將稍微調整 index.html 的排版，並加上作者暱稱與封面相片。注意照片讀取的部分是用 `{{ post.image.url }}` 。
+``` html
+<!-- index.html -->
+{% extends 'base.html' %}
+{% block title %} 首頁 {% endblock %}
+{% block sidebar %} 
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+{% for post in posts %}
+<div class='card'>
+    <div class="row g-0">
+        <div class="col-md-4">
+            <img src="{{ post.image.url }}" class="img-fluid rounded">
+		</div>
+        <div class="col-md-8">
+            <div class='card-header fs-5 fw-bold'>
+                <div class="row">
+                    <div class="col-md-8">
+                        <a href='/post/{{ post.slug }}' class="link-secondary">{{ post.title }}</a>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-end text-secondary fs-6 pt-1">
+                            作者：{{ post.author.nickname }}
+                        </div>
+                    </div>
+                </div>   
+            </div>
+            <div class='card-body'>
+                <p class="card-text">{{ post.content | truncatechars:100 }}</p>
+                <p class="card-text">
+                    <small class='text-muted'>發布時間：{{ post.date | date:"Y M d, H:i"}}</small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+<br>
+{% endfor %}
+{% endblock %}
+```
+
+在 post.html ，我們加上「留言」的區塊，先利用 if-else 確認是否有留言，再透過 for-loop 過濾出所有相關內容。
+
+``` html
+<!-- post.html -->
+{% extends 'base.html' %}
+{% block title %} 文章閱覽 {% endblock %}
+{% block sidebar %} 
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+<div class='card'>
+    <div class='card-header fs-5 fw-bold'>
+            {{ post.title }}
+    </div>
+    <div class='card-body'>
+            {{ post.content | linebreaks }}
+    </div>
+    <div class='card-footer text-muted'>
+        <small>發布時間：{{ post.date | date:"Y M d, H:i"}}</small>
+    </div>
+</div>
+<br>
+<div class="card">
+    <div class="card-header fs-5 fw-bold">
+        留言
+    </div>
+    <div class='card-body'>
+        {% if comments %}
+        {% for comment in comments %} 
+        <div class='card'>
+            <div class="card-body">
+                <h5>{{ comment.author.nickname }}</h5>
+                <p>{{ comment.content }}</p>
+                <small>發布時間：{{ comment.date | date:"Y M d, H:i"}}</small>
+            </div>
+        </div>
+        <br>
+        {% endfor %}
+        {% else %}
+            <p>目前還沒有人留言喔！</p>
+        {% endif %}
+    </div>
+</div>
+<br>
+<a href='/' class='link-secondary ms-2 pb-4'>回首頁</a>
+{% endblock %}
+```
+
+接著修改 views.py 如下：
+``` python
+from django.shortcuts import render, redirect
+from django.http import HttpResponse
+from .models import User, Tag, Post, Comment
+
+def index(request):
+    posts = Post.objects.all()
+    return render(request, 'index.html', locals())
+
+def showpost(request, slug):
+    posts = Post.objects.all()
+    try:
+        post = Post.objects.get(slug=slug)   
+        if post != None:
+            comments = Comment.objects.filter(post=post)
+            return render(request, 'post.html', locals())
+    except:
+        return redirect('/')
+```
+
+然後在 urls.py 加入媒體位址 MEDIA_URL ：
+``` python
+from django.conf.urls.static import static
+from django.conf import settings
+
+...
+
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+全部完成後，結果如下呈現。
+
+**( index.html )** http://localhost:8000/
+
+![](/static/images/2021/Django/final-index.jpg)
+
+**( post.html )** http://localhost:8000/post/iceland/
+
+![](/static/images/2021/Django/final-post.png)

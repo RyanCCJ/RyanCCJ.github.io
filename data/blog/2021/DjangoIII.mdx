@@ -1,0 +1,306 @@
+---
+title: 'Django (三) 網頁模版與網址設計'
+date: '2021-07-18'
+tags: ['程式','Python']
+draft: false
+summary: 'Django 系列文：以部落格為例建立各種常見功能，包含會員登入、貼文、留言'
+---
+
+## 目錄
+
+本篇是 Django 系列文的第三章，其他內容請參考以下連結：
+1. [Django (一) 基本介紹與環境架設](https://ryanccj.github.io/blog/2021/DjangoI)
+2. [Django (二) 模組功能與使用範例](https://ryanccj.github.io/blog/2021/DjangoII)
+3. [Django (三) 網頁模版與網址設計](https://ryanccj.github.io/blog/2021/DjangoIII)
+4. [Django (四) 資料庫與模型使用](https://ryanccj.github.io/blog/2021/DjangoIV)
+5. [Django (五) 表單設計與整合](https://ryanccj.github.io/blog/2021/DjangoV)
+6. [Django (六) 用戶登入與社群應用](https://ryanccj.github.io/blog/2021/DjangoVI)
+7. [Django (七) 網站部署與內容管理](https://ryanccj.github.io/blog/2021/DjangoVII)
+
+## 需求分析
+在這一章節中，我們終於要開始設計「部落格寫作平台」，也就是類似 Medium、Vocus 這類文字平台。
+之所以挑選這個主題，是因為它融合了各種常見功能，包含會員登入、貼文、留言等等，讓我們可以進一步練習用 Django 架網站。
+
+在開始之前，我們先來分析需求，規劃前端頁面與後端資料：
+- 首頁
+    - Nav：包含文章分類、登入功能
+    - Side：包含熱門文章、熱門標籤
+    - Content：社群貼文縮圖（按時間排序）
+- 個人頁面
+    - Nav：與首頁一致
+    - Side：包含個人資訊、帳密設定
+    - Content：發佈或刪除文章
+
+## 網頁模版
+從剛剛的規劃來看，我們至少需要兩個 html 檔，一個是「首頁」，一個是「個人頁面」。
+然而實際上，我們往往會將一個完整網頁切成好幾個 html section 來設計。這是由於網頁大部分的排版常是由幾個固定的版面部件所構成，例如相同的頁首 (header) 、頁尾 (footer) 與側邊欄 (side bar)。
+
+同樣的主視覺元素和顏色，可以確保網站瀏覽體驗是一致的；而切開各部件 html，可以確保程式碼精簡並進行模組化設計，才不會每次需要稍微調整內容（例如新增頁首中的導覽列 Navigation bar），就需要到處修改。
+
+在此前提下，我們先來設計第一個模板 base.html：
+``` html
+<!-- base.html -->
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+               
+        <!-- Bootstrap CSS & JS -->
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+        
+        <title>
+            {% block title %} {% endblock %}
+        </title>
+    </head>
+    <body>
+        <!-- header -->
+        {% include 'header.html' %}
+        <!-- body -->
+        <div class="container-fluid">
+            <div class="row">
+                <!-- side bar -->
+                <div class="col-md-3 mt-4">
+                    {% block sidebar %} {% endblock %}
+                </div>
+                <!-- content -->
+                <div class="col-md-9 mt-4">
+                    {% block content %} {% endblock %}
+                </div>               
+            </div>
+        </div>
+    </body>
+</html>
+```
+這邊我們引入 Bootstrap 5 前端框架來美化網頁，並透過 Django 的語法 `{% include ... %}` 與 `{% block ...%}` 兩種方式來切割 html 。
+
+`{% ... %}`是 Django 在 templates 中處理邏輯判斷式的語法，官方叫做 tags，可以參考 [相關文件](https://docs.djangoproject.com/en/3.2/ref/templates/builtins/#ref-templates-builtins-tags)。
+
+> Tags provide arbitrary logic in the rendering process.
+
+它可以用在許多地方，像是 if-else 判斷式或 for 迴圈。在這邊我們我們使用 `{% include %}` 來引入其他 html 檔，例如 header.html、footer.html，方便我們模組化設計各個部件。
+
+在 header.html 的部分，我們利用 Bootstrap Navbar 來設計導覽列，大家可以自行參考 [官方文件](https://getbootstrap.com/docs/5.0/getting-started/introduction/)。
+因為內容較多且與本次主題較無關，在此先不貼上 code 。如果有需要，可以去我的 [Github](https://github.com/RyanCCJ/django-tutorial) 下載本篇教學文的所有程式碼。
+
+至於 `{% block %}` 與 `{% endblock %}` ，則是 base.html 常見的語法，用來讓其他 html 繼承並客製化相關區塊，像是 title、sidebar、content。
+我們也可以用它來引入 CSS、Javascript 區塊，例如 `{% block script %}`。
+
+接著我們來看「首頁」所對應到的 index.html：
+``` html
+<!-- index.html -->
+{% extends 'base.html' %}
+{% block title %} 首頁 {% endblock %}
+{% block sidebar %} 
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+{% for post in posts %}
+    <div class='card'>
+        <div class='card-header fs-5 fw-bold'>
+                <a href='/post/{{ post.slug }}' class="link-secondary">{{ post.title }}</a>
+        </div>
+        <div class='card-body'>
+                {{ post.content | truncatechars:100 }}
+        </div>
+        <div class='card-footer text-muted'>
+                <small>發布時間：{{ post.date | date:"Y M d, H:i"}}</small>
+        </div>
+    </div>
+    <br>
+{% endfor %}
+{% endblock %}
+```
+在這裡，我們首先透過 `{% extends ... %}` 繼承 base.html 的所有內容，接著將 `{% block %}` 的內容補上。
+在 content 中我們使用了一個 for-loop ，將 posts 的所有內容逐步讀出，變數 (variables) 的傳遞方式則是透過 Django 的語法 `{{ ... }}`，官方說明如下：
+
+>A variable outputs a value from the context, which is a dict-like object mapping keys to values.
+
+此外，Django 還提供 filter 語法，方便我們將變數內容進一步轉換。在此例中，我們利用 `{{ post.content | truncatechars:100 }}` 擷取文章內容前100個字，以維持首頁版面乾淨。
+同時，我們利用 `{{ post.date | date:"Y M d, h:i"}}` 將發文時間轉換成「年 月 日, 時：分」等格式。關於 filter 的使用可以參考 [官方文件](https://docs.djangoproject.com/en/3.2/ref/templates/builtins/#built-in-filter-reference)。
+
+接著，我們新增首頁的函式到 views.py：
+``` python
+def index(request):
+    posts = Post.objects.all()
+    time = datetime.now()
+    return render(request, 'index.html', locals())
+```
+在這裡我們仿照之前的作法，傳遞 posts model 與 time 變數。其中 posts 本身會是一個 dict 形式，方便我們進一步獲取其 title、content、date...。最後，我們加上對應的網址到 urls.py：
+
+``` python
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', views.index),
+]
+```
+
+全部完成後，進入 http://localhost:8000/ ，成果如下：
+
+![](/static/images/2021/Django/blog-home.png)
+
+另外，各位可能會感到好奇，side bar 中是怎麼讀入圖片檔的？
+我們需要透過 Django 語法 `{% static ... %}` 來讀入媒體路徑，並在前面加上 `{% load static %}` 語法（整份 html 只需要打一次）。
+範例如下：
+``` html
+<!-- sidebar1.html -->
+{% load static %}
+<img src="{% static 'images/img1.jpg' %}">
+...
+<img src="{% static 'images/img2.jpg' %}">
+```
+這樣我們的首頁模板就完成了，以下再附上一些常用的 Django Templates 語法：
+
+### Tags
+
+| 名稱 | 用法 | 範例 |
+| ---- | ---- | --- |
+| include | 引入文件 | \{% include "header.html" %} |
+| extends | 繼承文件 | \{% extends "base.html" %} |
+| block | 切割區塊 | \{% block content %} \{% endblock %} |
+| if-else | 條件式 | \{% if... %} \{% elif... %} \{% else %} \{% endif %} |
+| for-loop | 迴圈式 | \{% for item in list %} \{% empty %} \{% endfor %} |
+| static | 讀入媒體 | \{% load static %} \{% static ... %} |
+
+- 以下是 for 迴圈內常用的方法與變數
+
+| 名稱 | 用法 | 範例 |
+| ---- | ---- | ---- |
+| cycle | 重複特定值 | \{% cycle "#000000" "#ffffff" %} 重複黑白 |
+| counter | 迴圈計數器 | forloop.counter0, forloop.counter 從0、1開始計算 |
+| revcounter | 迴圈倒數器 | forloop.revcounter0, forloop.revcounter |
+| first, last | 迴圈首末值 | forloop.first, forloop.last |
+| parentloop | 取上層迴圈 | forloop.parentloop |
+
+
+### Filter
+
+| 名稱 | 用法 | 範例 |
+| ---- | ---- | ---- |
+| addslashes | 加上跳脫字元 | \{\{It's a cat \| addslashes}} 變成 It\\'s a cat |
+| cut | 移除特定字串 | \{\{value \| cut:" "}} 移除空白 |
+| date | 設定日期顯示格式 | \{\{value \| date:"Y-m-d-H-i-s}} 年-月-日-時-分-秒|
+| default | 預設值 | \{\{value \| default:"某個預設值"} | \{\{value \| dicsort:"date"}} 用時間排序 |
+| escape | 將 HTML tags 表示成字串 | \{\{value \| escape}}
+| first, last | 只取出首或末值 | \{\{value \| first}} |
+| length | 回傳長度 | \{\{value \| length}} |
+| truncatechars | 裁切指定長度，剩下用"..." | \{\{value \| truncatechars:"25"}} 取前25個字 |
+
+## 網址設計
+
+還記得我們在 index.html 內有以下這行嗎：
+``` html
+<a href='/post/{{ post.slug }}'>{{ post.title }}</a>
+```
+難道網址也可以傳遞參數？是的。在以上的例子中，我們希望點擊文章標題時，可以看到完整內文。於是我們新增以下網址到 urls.py：
+``` python
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', views.index),
+    path('post/<slug:slug>/', views.showpost),
+]
+```
+其中 `post/<slug:slug>` 代表我們從網址 `post/` 傳遞參數 `slug` 進去 `views.showpost()`。接著，我們新增相關函式到 views.py：
+``` python
+from django.shortcuts import render, redirect
+
+...
+
+def showpost(request, slug):
+    posts = Post.objects.all()
+    try:
+        post = Post.objects.get(slug=slug)
+        if post != None:
+            return render(request, 'post.html', locals())
+    except:
+        return redirect('/')
+```
+`showpost()` 函式透過一組 try & except，導向另一個網頁 `post.html` ，目的是顯示完整的文章內容：
+
+``` html
+<!-- post.html -->
+{% extends 'base.html' %}
+{% block title %} 文章閱覽 {% endblock %}
+{% block sidebar %} 
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+<div class='card'>
+    <div class='card-header fs-5 fw-bold'>
+            {{ post.title }}
+    </div>
+    <div class='card-body'>
+            {{ post.content }}
+    </div>
+    <div class='card-footer text-muted'>
+            <small>發布時間：{{ post.date | date:"Y M d, H:i"}}</small>
+    </div>
+</div>
+<br>
+<a href='/' class='link-secondary ms-2'>回首頁</a>
+{% endblock %}
+```
+完成後點擊首頁的文章標題，會進入新頁面：
+
+![](/static/images/2021/Django/blog-post5.png)
+
+這時我們觀察網址，會看到 http://localhost:8000/post/post5/ ，代表成功傳遞 post.slug 作為網址內容。事實上，我們很常在部落格中看到利用時間作為文章網址安排，如以下範例：
+```
+http://localhost:8000/post/2021/07/20/01
+```
+
+這代表 2021 年 7 月 20 日第 1 篇貼文。這樣不僅簡單易懂，也利於後端儲存資料。常見的 urls 參數如下：
+
+| 符號 | 說明 |
+| --- | --- |
+| str | 字串，例：/post5/ |
+| int | 整數，例：/2021/07/20/ |
+| slug | ASCII所組成的字元或符號，例：/2021-07-20-post5/ |
+
+所以上面的網址對應之 urls.py 為：
+``` python
+path('post/<int:y>/<int:m>/<int:d>/<int:post_num>/', views.showpost)
+```
+另外，如果我們想將網址利用 templates 語法作為參數傳遞，可以在 urls.py 網址末端加上名稱：
+``` python
+path('post/<int:y>/<int:m>/<int:d>/<int:post_num>/', views.showpost, name='post_url')
+```
+然後在 templates 中透過 `{% url '<name>' arg1 arg2 ... %}` 加以運用，一樣可以導向上述的網址：
+``` html
+<a href="{% url 'post_url' 2020 07 20 01 %}">文章閱覽</a>
+```
+
+另外，一般網頁常見的 GET 參數傳遞方式 http://localhost:8000/post/?post=5 ，在 Django 中會被忽略，與沒加參數的結果相同。
+
+## 網址錯誤
+
+當我們嘗試連到不存在的網址，瀏覽器會顯示 Page not found (404) ，這代表 urls.py 裡面沒有可以正確對照的路徑。
+
+![](/static/images/2021/Django/404.png)
+
+若我們不想要出現這種錯誤訊息，可以修改 settings.py 中關於 debug 與 host 的設定，再透過自訂 404 頁面來將使用者導回正確的頁面：
+
+``` python
+DEBUG = False # <-- 關閉開發模式
+ALLOWED_HOSTS = ['*'] # <-- 設定部署的網址或 IP，此處為全部開放
+```
+
+``` html
+<!-- 404.html -->
+{% extends 'base.html' %}
+{% block title %} 首頁 {% endblock %}ƒ
+{% block sidebar %}
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+<h1>404</h1>
+<h3>您所查詢的頁面不存在</h3>
+<a class="link-secondary" href="/">回首頁</a>
+{% endblock %}
+```
+
+若我們再次嘗試連結錯誤網址，可以順利看到剛剛設定的 404 頁面，但是圖片卻失效了。
+這是因為產品模式無法像開發模式那樣自動部署靜態檔案，需要進行額外設定，相關說明可以參閱第七章的內容。
+
+除了 404.html 以外，還可以考慮 500.html (server error)、403.html (HTTP forbidden)、400.html (bad request)，才可以預防各種常見的失效情境。

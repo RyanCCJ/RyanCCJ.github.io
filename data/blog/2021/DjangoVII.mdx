@@ -1,0 +1,330 @@
+---
+title: 'Django (七) 網站部署與內容管理'
+date: '2021-08-01'
+tags: ['程式','Python']
+draft: false
+summary: 'Django 系列文：介紹如何在本地端或虛擬主機部署網站，以及使用 CMS 建立豐富的功能'
+---
+
+## 目錄
+
+本篇是 Django 系列文的第七章，其他內容請參考以下連結：
+1. [Django (一) 基本介紹與環境架設](https://ryanccj.github.io/blog/2021/DjangoI)
+2. [Django (二) 模組功能與使用範例](https://ryanccj.github.io/blog/2021/DjangoII)
+3. [Django (三) 網頁模版與網址設計](https://ryanccj.github.io/blog/2021/DjangoIII)
+4. [Django (四) 資料庫與模型使用](https://ryanccj.github.io/blog/2021/DjangoIV)
+5. [Django (五) 表單設計與整合](https://ryanccj.github.io/blog/2021/DjangoV)
+6. [Django (六) 用戶登入與社群應用](https://ryanccj.github.io/blog/2021/DjangoVI)
+7. [Django (七) 網站部署與內容管理](https://ryanccj.github.io/blog/2021/DjangoVII)
+
+## 部署網站在 Apache
+
+這是 Django 教學文的最後一章，我們終於要來讓網站上線。
+雖然 Django 自身有提供 runserver 的方式，但是只適合作為本地端測試，不適合最為最終發佈網站的方法。
+我們可以透過專業的伺服器軟體如 Apache、Nginx 作為正式發行的伺服器，其效能與安全性更佳，也可以進行更多專業設定（如 cache）。
+
+以下以 Apache 作為範例，我們先安裝主程式與相關套件：
+```bash
+$ sudo apt install apache2 libapache2-mod-wsgi-py3
+$ sudo service apache2 start # <-- 啟動 Apache server
+```
+成功啟動後，可以在 [http://localhost/](http://localhost/) 看到 Apache 的預設頁面。
+這邊要注意的是，mod_wsgi 為 Apache2 中與 Django wsgi 溝通的模組，需要確保兩邊 Python 版本一致。
+
+![](/static/images/2021/Django/apache.png)
+
+接著我們新增相關設定至 `/etc/apache2/sites-available/000-default.conf`：
+```
+<Directory /mysie/static>
+    Require all granted
+</Directory>
+<Directory /mysie/media>
+    Require all granted
+</Directory>
+<Directory /mysie/mysite>
+    <Files wsgi.py>
+        Require all granted
+    </Files>
+</Directory>
+
+Alias /static /mysie/static
+Alias /media /mysie/media
+WSGIDaemonProcess mysite python-path=/mysite python-home=/path/to/your/python/env
+WSGIProcessGroup mysite
+WSGIScriptAlias / /mysie/mysite/wsgi.py
+```
+注意，上述內容需自行修改專案路徑（此處預設為 `/mysite`）以及 Python 虛擬環境路徑。
+Alias 會將特定的 URL 對應至指定的資料路徑，此處包含靜態檔案 `/static` 與動態檔案 `media` 的路徑。
+WSGIScriptAlias 會將整個網站指定至某個 URL（此處預設為 `/`）底下，並以背景執行 (Daemon Process) 的方式運作後端程式。
+其他設定細節可以參考 [官方文件](https://docs.djangoproject.com/zh-hans/5.0/howto/deployment/wsgi/modwsgi/)。
+
+最後我們 reload Apache，系統將以「不重啟」的方式更新設定檔。當我們瀏覽 localhost，即可以看到部署好的網站。
+``` bash
+$ sudo service apache2 reload # <-- 重載 Apache 設定
+```
+
+![](/static/images/2021/Django/mysite.jpg)
+
+### 開發與除錯
+還記得在第三章最後我們曾提到過 404 頁面嗎？
+我們可以透過修改 settings.py，轉換 Django 從「開發模式」變為「產品模式」，進一步增加網頁安全性。
+``` python
+DEBUG = False # <-- 關閉開發模式
+ALLOWED_HOSTS = ['*'] # <-- 設定部署的網址或 IP，此處為全部開放
+
+...
+
+# Static files
+STATIC_URL = '/static/'
+if DEBUG:
+        STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+else:
+    STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+```
+
+另外，我們可以發現透過 Web Server 部署網站後，將無法像 manage.py runserver 般直接對網站進行除錯。
+解決方法是改為查看 Apache error log（輸入 `Shfit + G` 可以直接移動到文件最底下），上面會顯示相關錯誤訊息和 Python print() 內容：
+``` bash
+$ less /var/log/apache2/error.log # <-- 顯示 Apache error log
+```
+
+之後只要 Django 專案中有任何程式更動（不含 templates），都需要透過更新 wsgi.py 檔案，來告訴 Apache 需要重新部署該網站：
+``` bash
+$ touch /mysite/mysite/wsgi.py # <-- 更新時間戳記
+```
+
+## 部署網站在虛擬主機
+
+除了自己架設硬體伺服器外，市面上有許多虛擬主機商，可以讓我們免費或付費使用不同的主機方案。使用虛擬主機商的服務，不但可以節省自行維護硬體的負擔、降低網站被攻擊的風險，也可以拿到一些優惠（像是免費 SSL、DNS...）。
+
+目前市面上常見的雲端平台，包括 Google Cloud Platform (GCP)、Amazon Web Services (AWS)、Dgital Ocean、Heroku... 等。
+也有專門為特殊需求打造的主機服務，例如以 Wordpress 為主體的主機商，或是以 Python 為主體的 Pythonanywhere。本章即會將 Pythonanywhere 和 Heroku 的免費方案個別作介紹，大家可以自由選擇適合自己的平台與方案。
+
+請注意，無論使用哪種平台，要長久營運的網站都建議付費購買基本方案，比較有品質保證。
+
+### Pythonanywhere
+
+>Host, run, and code Python in the cloud!
+
+![](/static/images/2021/Django/pythonanywhere.png)
+
+Pythonanywhere 是一個專為 Python 環境打造的雲端環境，其免費方案有每天約 100s 的 CPU 運行時間，以及 512 MB 的用量限制，非常適合我們做一些小型的程式開發或網站測試。
+
+我們首先到 [官網](https://www.pythonanywhere.com) 註冊自己的帳號，註冊完後到 Dashboard 會看到 "Consoles", "Files", "Web", "Tasks", "Databases" 等區域，分別代表著終端機、上傳的目錄與檔案、部署的網站、運行的工作、MySQL 或 Pstgres 等資料庫，各區域功能相當清楚。
+
+我們首先到 Web 區域，按下「 Add a new web app 」，在目前方案中，只有第一個網站是免費的。我們依照提示選擇 Web framework，在這裡可以直接選擇「 Django 」，或是選擇最下面的「 Manual configuration 」，這樣就可以自行設定想要的版本。
+
+![](/static/images/2021/Django/pythonanywhere-setting.png)
+
+選擇好 Python 版本後按下確認，就會自行用帳號 ID 建立網站；點選進入 Pythonanywhere 給的網址，應該可以順利看到以下頁面。請注意免費版網站每三個月沒使用就會自動下線，需要自己上來延續方案。
+
+![](/static/images/2021/Django/pythonanywhere-hello-world.png)
+
+接著我們開始部署我們的 Django 網站。首先進入「 Consoles 」區域，點選並建立我們的 bash shell，然後按照第一章的教學：建立虛擬環境、安裝 Django、建立專案與 APP。
+``` bash
+$ virtualenv --python=python3.x VENV #建立虛擬環境
+$ source VENV/bin/activate
+(VENV)$ pip install django==3.x #安裝Django
+(VENV)$ django-admin startproject mysite #建立專案
+(VENV)$ cd mysite
+(VENV)$ python manage.py startapp blog #建立APP
+```
+其中，Python 與 Django 版本或專案名稱，請依自己先前的習慣建立。接著我們到「 Files 」區域，按照原本的資料夾結構，創建 templates、static、media 等資料夾，然後上傳我們的檔案。
+
+接著仿照前面 Apache 修改 settings.py，設定完後按下「 Save 」與最右側的刷新按鈕。
+然後到「 Web 」區域，往下點選「 Code 」>「 Source code 」，將網站路徑加上去，此例為 `/home/< Your User Name >/mysite` 。
+
+接著選擇「 Code 」>「 WSGI configuration file 」，按照裡面 Django 區塊的提示，將內容全部改寫：
+``` python
+# +++++++++++ DJANGO +++++++++++
+import sys, os
+from django.core.wsgi import get_wsgi_application
+
+path = '/home/< Your User Name >/mysite'
+
+if path not in sys.path:
+    sys.path.append(path)
+    
+os.environ['DJANGO_SETTINGS_MODULE'] = 'mysite.settings'
+
+application = get_wsgi_application()
+```
+我們還需將 mysite/mysite/wsgi.py 也改成上述的內容。之後同樣在「 Web 」區域中的「 Virtualenv 」要填上虛擬環境的路徑，此例為 `/home/< Your User Name >/VENV` 。
+
+然後在「 Web 」>「 Static files 」，加上下列兩個位址：
+
+| URL | Directory |
+| --- | --------- |
+| `/static/` | `/home/< Your User Name >/static/` |
+| `/media/` | `/home/< Your User Name >/media/` |
+
+之後進入網址，應該就可以順利看到網站上線；若是出現 bug ，可以去 error log 查看是哪邊沒設定好，設定完記得 reload web APP 。
+
+### Heroku
+
+Heroku 是一個非常知名的雲端平台服務 (PaaS)，與前面的 Pythonanywhere 直接提供一個 Linux 主機不同，Heroku 提供的是完全乾淨的作業環境，並整合自己的 Git 服務，需要我們自己從頭開始設定。
+
+Heroku 免費版提供單一個執行緒與 512 MB 的儲存空間，對於小型網站的測試也是綽綽有餘。請注意 Heroku 免費版每 30 分鐘不用就會休眠，不適合網站的長期部署。
+
+我們先到 Heroku [官網](https://www.heroku.com) 註冊自己的帳號，然後到 [教學頁面](https://devcenter.heroku.com/articles/getting-started-with-python#set-up) 下載桌面程式，安裝完後即可在 bash 輸入以下指令：
+``` bash
+$ heroku login
+```
+就可以在 local 端登入 Heroku 帳戶。接著我們要新增 Heroku APP，可以到 Heroku 網站的 [Dashboard](https://dashboard.heroku.com/apps) 自己建立，或是直接在終端機輸入以下指令：
+``` bash
+$ heroku create "<Your APP Name>"
+```
+不論在哪邊創建，已經被命名過的 APP 名稱都不能再使用。筆者試過 mysite、myproject... 一堆都不能用，不如直接在名稱那邊留空，Heroku 會自己幫你建一個，以我這邊為例：
+``` bash
+$ heroku create       
+Creating app... done, ⬢ rocky-gorge-30942
+https://rocky-gorge-30942.herokuapp.com/ | https://git.heroku.com/rocky-gorge-30942.git
+```
+可以看見 Heroku 不僅幫我們建立好 APP，連 Git 也準備好了。我們先新增不需要上傳的文件「 .gitignore 」如下：
+```
+*.pyc
+_pycache_
+staticfiles
+```
+
+然後新增一個檔案 Procfile ，注意此檔案不能有副檔名（如.txt）：
+``` 
+web: gunicorn mysite.wsgi
+```
+上面的檔案是讓 Heroku 產生一個 Dyno（執行緒）叫做 web，內容是利用 gunicorn 來讀取 wsgi 。所以我們需要安裝缺少的套件 gunicorn ，然後輸出套件列表 requirements.txt 給 Heroku 參考：
+``` bash
+$ pip install dj-database-url dj-static gunicorn psycopg2
+$ pip freeze > requirements.txt
+```
+
+接著仿照前面 Apache 修改 settings.py。除此之外，我們也需要修改 wsgi.py 的內容如下：
+``` python
+import os
+from dj_static import Cling
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mysite.settings")
+
+application = Cling(get_wsgi_application())
+```
+
+接著我們初始化本地端的 Git 專案：
+``` bash
+$ cd "<Your Project Dir>"
+$ git init
+$ git add .
+$ git commit -m "first commit"
+```
+然後就可以連結到我們的 Heroku APP：
+``` bash
+heroku git:remote -a "<Your APP Name>"
+```
+然後 push 到 Heroku Git repo：
+``` bash
+$ git push heroku master
+```
+這樣，網站應該就成功了。我們可以進入 `https://<Your App Name>.herokuapp.com` ，或是直接輸入指令：
+``` bash
+$ heroku open
+```
+我們可以看到，雖然 static files 有正確顯示，media files 卻讀取失敗。這是因為 Heroku \<免費版> 不支援媒體上傳與儲存功能，相關討論可以參考 [這篇文章](https://stackoverflow.com/questions/59114717/imagesmedia-not-displaying-on-django-heroku-server)，目前只能暫時透過第三方服務來應對。
+
+![](/static/images/2021/Django/heroku.jpg)
+
+最後，先前的資料庫是放在 db.sqlite3，我們還可以改成 Heroku 自己的資料庫。請在 settings.py 中增加下面的內容：
+``` python
+import dj_database_url
+db_from_env = dj_database_url.config()
+DATABASE['default'].update(db_from_env)
+```
+接著重新透過 git add、commit、push，將設定更新到 server 上，再執行以下指令即可搬移資料庫：
+``` bash
+$ heroku run python manage.py migrate
+```
+
+其他常見指令：
+``` bash
+$ heroku restart #重開機
+$ heroku logs --tail #查看logs來debug
+$ heroku apps # 檢視目前帳戶的所有APP
+$ heroku app:info #查詢目前所有連線的APP狀態
+$ heroku run bash #直接連接heroku server
+$ heroku run python manage.py syncdb
+```
+
+## 內容管理系統
+
+現在，我們已經學會如何從零開始架設網站，前端、後端、部署都有所著墨。
+然而對於一般使用者而言，若只需要架設簡單的部落格網站，從零開始學習未免有些繁瑣，這就是為什麼會有 **內容管理系統** (content management system, CMS)。
+這是一種將前、後端與資料庫都整合好的解決方案，目的是降低架設與維護門檻，讓使用者可以專注在文章撰寫，特別適合架設部落格網站。[^1]
+
+目前常見的 CMS 有 [WordPress](https://wordpress.com/)、[Joomla](https://www.joomla.org) 等，也可以使用 Django 官方提出的框架 [Django CMS](https://www.django-cms.org/)，或是其他第三方框架如 [Mezzanine CMS](https://github.com/stephenmcd/mezzanine)。
+以下用 Mezzanine CMS 作為範例介紹。
+
+[^1]: 如果只需要建立個人部落格，可以使用其他更簡單的靜態網站生成框架，如 Hugo、Hexo、Jekyll 等，這即是採用 JAMstack (JavaScript、APIs、Markup) 開發方式。
+
+### Mezzanine CMS
+
+![](/static/images/2021/Django/mezzanine.png)
+
+> Mezzanine is a powerful, consistent, and flexible content management platform.
+
+Mezzanine 是一個 Django 專用的內容管理套件，具備相當豐富的功能、多個佈景主題，且完全免費。
+我們只要進入[官網](http://mezzanine.jupo.org/)，就可以在右邊「 Quick Start 」區域看到安裝流程。
+請注意，Mezzanine 僅支援特定 Django 版本（目前最新到 v4.0），建議使用虛擬環境，否則會蓋掉你目前的 Django version。
+
+``` bash
+(VENV2)$ pip install mezzanine
+(VENV2)$ mezzanine-project myproject
+(VENV2)$ cd myproject
+(VENV2)$ python manage.py createdb
+```
+初次安裝會問你一些問題，全部選擇預設的就可以了。完成後即可啟動 server。
+```
+(VENV2)$ python manage.py runserver
+              .....
+          _d^^^^^^^^^b_
+       .d''           ``b.
+     .p'                `q.
+    .d'                   `b.
+   .d'                     `b.   * Mezzanine 4.3.1
+   ::                       ::   * Django 1.11.29
+  ::    M E Z Z A N I N E    ::  * Python 3.7.3
+   ::                       ::   * SQLite 3.28.0
+   `p.                     .q'   * Darwin 19.6.0
+    `p.                   .q'
+     `b.                 .d'
+       `q..          ..p'
+          ^q........p^
+              ''''
+
+Performing system checks...
+
+System check identified no issues (0 silenced).
+Django version 1.11.29, using settings 'myproject.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CONTROL-C.
+```
+進入 http://127.0.0.1:8000/ 畫面如下：
+
+![](/static/images/2021/Django/mezzanine-home.png)
+
+我們進入 admin 介面可以看到非常類似 Wordpress 的 dashboard，除了基本的網站與用戶，Mezzanine 還幫我們建立了部落格文章區塊，對於想快速使用的人來說非常方便。
+
+![](/static/images/2021/Django/mezzanine-dashboard.png)
+
+然而，原本的介面稍微有些陽春，我們可以到它的 [Github](https://github.com/stephenmcd/mezzanine) 上，點選介紹中的 [Free Themes](https://github.com/thecodinghouse/mezzanine-themes) ，就可以下載四個現成的佈景主題 (flat/moderna/nova/solid) 。下載完後，按照說明文件加入 APP 到 settings.py 中便可以順利使用。
+
+``` python
+INSTALLED_APPS = (
+    # "moderna",
+    # "flat",
+    # "nova",
+    "solid", #<--選擇自己要的主題
+    "django.contrib.admin",
+    "django.contrib.auth",
+    ...
+)
+```
+結果呈現如下，大家可以自行嘗試。
+![](/static/images/2021/Django/mezzanine-theme.png)

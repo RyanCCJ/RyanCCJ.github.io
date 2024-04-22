@@ -1,0 +1,152 @@
+---
+title: 'LeetCode 206. Reverse Linked List'
+date: '2024-04-17'
+tags: ['LeetCode']
+draft: true
+summary: 'Linked List, Recursion (Easy)'
+---
+
+## Description
+
+[![](https://img.shields.io/badge/Easy-green)](https://leetcode.com/problems/reverse-linked-list/)
+
+Given the `head` of a singly linked list, reverse the list, and return the reversed list.
+
+Example 1:
+```
+Input: head = [1,2,3,4,5]
+Output: [5,4,3,2,1]
+
+```
+Example 2:
+```
+Input: head = [1,2]
+Output: [2,1]
+```
+
+Example 3:
+```
+Input: head = []
+Output: []
+```
+
+### Constraints:
+
+- The number of nodes in the list is the range [0, 5000].
+- `-5000 <= Node.val <= 5000`
+ 
+**Follow up:** A linked list can be reversed either iteratively or recursively. Could you implement both?
+
+## Python
+
+### iteratively
+
+```python
+# Definition for singly-linked list.
+# class ListNode:
+#     def __init__(self, val=0, next=None):
+#         self.val = val
+#         self.next = next
+class Solution:
+    def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:
+        prev = None
+        curr = head
+        while curr:
+            tmp = curr.next
+            curr.next = prev
+            prev = curr
+            curr = tmp
+        return prev
+```
+- Time Complexity: O(n)
+- Space Complexity: O(1)
+- Run Time: 38ms (51.36%)
+- Memory: 17.72MB (34.12%)
+
+### recursively
+
+```python
+# Definition for singly-linked list.
+# class ListNode:
+#     def __init__(self, val=0, next=None):
+#         self.val = val
+#         self.next = next
+class Solution:
+    def __init__(self):
+        self.rev = None
+
+    def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:
+        def reverse(prev, curr):
+            if (curr):
+                reverse(curr, curr.next)
+                curr.next = prev
+            else:
+                self.rev = prev
+        reverse(None, head)
+        return self.rev
+```
+- Time Complexity: O(n)
+- Space Complexity: O(1)
+- Run Time: 38ms (51.36%)
+- Memory: 17.76MB (34.12%)
+
+## C
+
+### iteratively
+
+```c
+/**
+ * Definition for singly-linked list.
+ * struct ListNode {
+ *     int val;
+ *     struct ListNode *next;
+ * };
+ */
+struct ListNode* reverseList(struct ListNode* head){
+    struct ListNode* prev = NULL;
+    struct ListNode* current = head;
+    struct ListNode* temp = NULL;
+    while (current != NULL) {
+        temp = current->next;
+        current->next = prev;
+        prev = current;
+        current = temp;
+    }
+    return prev;
+}
+```
+- Time Complexity: O(n)
+- Space Complexity: O(1)
+- Run Time: 0ms (100%)
+- Memory: 6.32MB (29.36%)
+
+### recursively
+
+```c
+/**
+ * Definition for singly-linked list.
+ * struct ListNode {
+ *     int val;
+ *     struct ListNode *next;
+ * };
+ */
+struct ListNode *cat;
+void reverse(struct ListNode *prev, struct ListNode *cur) {
+   if(cur) {
+      reverse(cur, cur->next);
+      cur->next = prev;
+    }
+    else{
+      cat = prev;
+    }
+}
+
+struct ListNode* reverseList(struct ListNode* head){
+    reverse(NULL, head);
+    return cat;
+}
+```
+- Time Complexity: O(n)
+- Space Complexity: O(1)
+- Run Time: 0ms (100%)
+- Memory: 6.74MB (7.54%)

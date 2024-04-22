@@ -1,0 +1,338 @@
+---
+title: 'Django (五) 表單設計與整合'
+date: '2021-07-30'
+tags: ['程式','Python']
+draft: false
+summary: 'Django 系列文：使用 HTML form 和 ModelForm 來實作網頁表單，並加入驗證碼功能'
+---
+
+## 目錄
+
+本篇是 Django 系列文的第五章，其他內容請參考以下連結：
+1. [Django (一) 基本介紹與環境架設](https://ryanccj.github.io/blog/2021/DjangoI)
+2. [Django (二) 模組功能與使用範例](https://ryanccj.github.io/blog/2021/DjangoII)
+3. [Django (三) 網頁模版與網址設計](https://ryanccj.github.io/blog/2021/DjangoIII)
+4. [Django (四) 資料庫與模型使用](https://ryanccj.github.io/blog/2021/DjangoIV)
+5. [Django (五) 表單設計與整合](https://ryanccj.github.io/blog/2021/DjangoV)
+6. [Django (六) 用戶登入與社群應用](https://ryanccj.github.io/blog/2021/DjangoVI)
+7. [Django (七) 網站部署與內容管理](https://ryanccj.github.io/blog/2021/DjangoVII)
+
+## 網頁表單使用
+
+在社群平台中，最重要的莫過於「發文」的功能了。我們不能讓一般使用者進入後台介面隨意更動資料庫，必須把這個功能實現在前端頁面中，這時就需要用到 HTML \<form> 。
+
+一個簡單的表單範例如下：
+``` html
+<form action="/" method="GET">
+  <label for="user_name">請輸入帳號：</label>
+  <input type="text" id="user_name" name="user_name">
+  <label for="user_pass">請輸入密碼：</label>
+  <input type="password" id="user_pass" name="user_pass">
+  <br>
+  <input type="submit" value="輸入">
+  <input type="reset" value="清除">
+</form> 
+```
+
+透過表單可以讓使用者與後端互動，將訊息傳送到資料庫或 views 來計算與分析，當然也可以做到簡單的用戶登入與發文功能。
+關於用戶登入的部分，因為會涉及到 Sessions 和社群軟體的應用，我們將在下一章作說明；這個章節我們要先實作出發文頁面，來整合前面資料庫的使用。
+
+在 Django 中，有兩種方式來製作表單，第一種是透過 HTML \<form> ，第二種是透過 ModelForm ，我們會在後續內容分別介紹。
+
+### HTML \<form>
+
+首先，我們回到剛剛的 post.html ，先來試著用傳統方式做出一個 HTML 表單：
+``` html
+<div class="card">
+    <div class="card-header fs-5 fw-bold">
+        發表您的留言 ...
+    </div>
+    {% if message %} 
+    <div class="alert alert-warning">{{ message }}</div>
+    {% endif %}
+    <div class='card-body'>
+        <form name="comment" method="GET">
+            <label for="user_id">你的暱稱：</label>
+            <input type="text" id="user_id" name="user_id">
+            <label for="user_pass">密碼：</label>
+            <input type="password" id="user_pass" name="user_pass" class="mb-2">
+            <br>
+            <textarea name="user_comment" rows="5" cols="60"></textarea>
+            <br>
+            <input type="submit" value="張貼">
+            <input type="reset" value="清除">
+        </form>
+    </div>
+</div>
+```
+
+這裡我們先示範用 GET 方式來接收表單，我們到 views.py 修改如下：
+``` python
+def showpost(request, slug):
+    posts = Post.objects.all()
+    try:
+        post = Post.objects.get(slug=slug)   
+        
+        if post != None:
+            comments = Comment.objects.filter(post=post)
+            
+            # 加入下面的 try-except
+            try:
+                user_id = request.GET['user_id']
+                user_pass = request.GET['user_pass']
+                user_comment = request.GET['user_comment']        
+                user = User.objects.get(nickname=user_id)             
+                
+                if user.password == user_pass:     
+                    comment = Comment.objects.create(author=user, post=post, content=user_comment)
+                    comment.save()       
+                    message = "儲存成功！"
+
+            except:
+                message = "請正確填寫每一個欄位"
+
+            return render(request, 'post.html', locals())
+    except:
+        return redirect('/')
+```
+我們回到 post 頁面發表留言：
+
+![](/static/images/2021/Django/new-comment.png)
+
+按下「張貼」後，網址會刷新成以下附帶參數的形式，代表順利用 GET 方式更新資料庫：
+```
+http://localhost:8000/post/iceland/?user_id=小美&user_pass=123&user_comment=好呀，歡迎大家一起來～～
+```
+但有時候，我們不希望表單的內容透過網址的方式傳遞，這容易被有心人士擷取內容（例如上面的帳號與密碼）。
+關於敏感資訊，我們通常使用 POST 的方式來傳遞訊息。可以修改表單如下：
+``` html
+<form name="comment" method="POST">
+    {% csrf_token %}
+    ...  
+</form>
+```
+其中， `{% csrf_token %}` 是 Django 防止網站 CSRF (cross-site request forgery) 攻擊的機制，讓駭客無法偽裝成驗證過的網站來騙取使用者資訊。
+若是不加上這行， Djanog 會出現 403 Error (Forbidden) 。
+
+之後，我們將剛剛 views.py 中的 GET 方式都改成 POST，應該就可以順利用 POST 來傳遞表單了。
+``` python
+user_id = request.POST['user_id']
+user_pass = request.POST['user_pass']
+user_comment = request.POST['user_comment']
+```
+
+### ModelForm
+
+除了透過 HTML \<form>，Django 本身也提供 form 模組來直接產生表單，請在 blog 資料夾下建立一個 forms.py：
+``` python
+from django import forms
+from blog import models
+
+class PostForm(forms.ModelForm):
+    class Meta:
+        model = models.Post
+        fields = ['author', 'title', 'slug', 'image', 'content', 'category', 'tags']
+    
+    def __init__(self, *args, **kwargs):
+        super(PostForm, self).__init__(*args, **kwargs)
+        self.fields['author'].label = '帳號'
+        self.fields['title'].label = '標題'
+        self.fields['slug'].label = '網址名'
+        self.fields['image'].label = '封面相片'
+        self.fields['content'].label = '內文'
+        self.fields['category'].label = '分類'
+        self.fields['tags'].label = '標籤'
+```
+
+Meta 的部分是設定要用哪個 model ，以及要用哪些欄位； \_\_init__() 的部分是設定欄位名稱，若不另外設定則會顯示原始名稱 ( author, title... )。
+
+接著我們來建立個人頁面 templates/user.html：
+``` html
+<!-- user.html -->
+{% extends 'base.html' %}
+{% block title %} 個人頁面 {% endblock %}
+{% block sidebar %} 
+{% include 'sidebar1.html' %}
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header fs-5 fw-bold">
+        發佈貼文
+    </div>
+    {% if message %} 
+    <div class="alert alert-warning">{{ message }}</div>
+    {% endif %} 
+    <div class='card-body'>
+        <form name="my_post" method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ post_form.as_p }}
+            <input type="submit" value="張貼" class="btn btn-outline-secondary me-2">
+            <input type="reset" value="清除" class="btn btn-outline-danger">
+        </form>  
+    </div>
+</div>
+<br>
+<a href='/' class='link-secondary ms-2 pb-4'>回首頁</a>
+{% endblock %}
+```
+我們可以看見表單的部分只需要一句 `{{ post_form.as_p }} `就可以自動產出整個 PostForm ，且會自動整合 Model 內容（如 ForeignKey ），輸入內容不符合資料格式也會自動偵測並提醒，非常方便。
+另外， `{{ post_form.as_p }}` 代表要將表單用 \<p> 來輸出，我們也可以用 `.as_table` 、 `.as_ul` 等其他方式。
+請注意 Django Form 不會自動產生 \<table> 等上下文標籤，需要自己加。
+
+我們稍微改寫下 views.py 的 import 方式，讓程式比較清楚。接著我們加入以下函式：
+``` python
+from blog import models, forms
+
+...
+
+def user(request):
+    posts = models.Post.objects.all()
+
+    if request.method == 'POST':
+        post_form = forms.PostForm(request.POST, request.FILES)
+        if post_form.is_valid():
+            post_form.save()
+            message = '儲存成功！'
+        else:
+            message = '儲存失敗，請正確填寫每一個欄位'
+    else:
+        post_form = forms.PostForm()
+        message = '請正確填寫每一個欄位'
+    
+    return render(request, 'user.html', locals()) 
+```
+為了正確讀取相片檔案，除了 `request.POST` ，還需要加上 `request.FILES` ，並在 HTML \<form> 加上 `enctype="multipart/form-data"` 這個參數。
+詳細說明可以參考 [官方文件](https://docs.djangoproject.com/en/3.2/topics/http/file-uploads/)。
+
+最後我們在 urls.py 加入相應網址，即可正確呼叫函式：
+``` python
+path('user/', views.user)
+```
+
+完成後即可順利在 http://localhost:8000/user/ 中貼文並儲存在資料庫。
+
+![](/static/images/2021/Django/new-post.png)
+![](/static/images/2021/Django/new-post2.png)
+
+### 表單驗證碼
+
+為了防止有心人士用程式自動填寫表單，我們常會在表單送出前加入驗證碼 (Captcha) ，以下會提供簡單範例。
+
+首先安裝 django-simple-captcha 模組：
+``` bash
+$ pip install django-simple-captcha
+```
+
+然後把剛剛的模組加入 settings.py ：
+``` python
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'blog',
+    'captcha',  # <- here
+]
+```
+
+由於此模組會需要動到資料庫，我們先執行 makemigrations、migrate。
+
+接著在 urls.py 加入專用網址：
+``` python
+from django.urls import include
+...
+path('captcha/', include('captcha.urls')),
+```
+最後在 forms.py 加入 CaptchaField：
+``` python
+from captcha.fields import CaptchaField
+
+class PostForm(forms.ModelForm):
+
+    class Meta:
+        ...
+
+    def __init__(self, *args, **kwargs):
+        ...
+        self.fields['captcha'].label = '我不是機器人'
+    
+    captcha = CaptchaField()
+```
+
+完成後即可順利看到驗證碼出現在表單內。
+
+![](/static/images/2021/Django/simple-captcha.png)
+
+除了 django-simple-captcha 模組，我們也可以使用 Google 提供的 reCAPTCHA 驗證方式。
+首先我們到 [官網](https://www.google.com/recaptcha/admin/create) 註冊資料，選擇 reCAPTCHA v2 或 v3 版本都行，網域填寫 127.0.0.1 或是 localhost，讓我們在本地端使用。
+
+![](/static/images/2021/Django/reCAPTCHA.png)
+
+註冊完成後，需要複製網站金鑰 (Site key) 與密鑰 (Secret key) ，網站金鑰放在 HTML 內，密鑰則放在伺服器內。
+請到 settings.py 加入以下敘述：
+``` python
+GOOGLE_RECAPTCHA_SECRET_KEY = '<Your Secret key>'
+```
+
+然後到 user.html \<form> 加入以下敘述：
+``` html
+<form name="my_post" method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ post_form.as_p }}
+    
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <div class="g-recaptcha" data-sitekey="<Your Site Key>"></div>
+    <br>
+    
+    <input type="submit" value="張貼" class="btn btn-outline-secondary me-2">
+    <input type="reset" value="清除" class="btn btn-outline-danger">
+</form> 
+```
+
+最後我們到 views.py 加入驗證方式：
+``` python
+from django.conf import settings
+import urllib
+import json
+
+...
+
+def user(request):
+    posts = models.Post.objects.all()
+
+    if request.method == 'POST':
+        post_form = forms.PostForm(request.POST, request.FILES)
+        if post_form.is_valid():
+            
+            # 請加入以下內容...
+            recaptcha_response = request.POST.get('g-recaptcha-response')
+            url = 'https://www.google.com/recaptcha/api/siteverify'
+            values = {
+                'secret': settings.GOOGLE_RECAPTCHA_SECRET_KEY,
+                'response': recaptcha_response
+            }
+            data = urllib.parse.urlencode(values).encode()
+            req = urllib.request.Request(url, data=data)
+            response = urllib.request.urlopen(req)
+            result = json.loads(response.read().decode())
+            if result['success']:
+                post_form.save()
+                message = '儲存成功！'
+            else:
+                message = 'reCAPTCHA驗證失敗，請重新確認'
+            # 請加入以上內容...
+            
+        else:
+            message = '儲存失敗，請正確填寫每一個欄位'
+    else:
+        post_form = forms.PostForm()
+        message = '請正確填寫每一個欄位'
+    
+    return render(request, 'user.html', locals()) 
+```
+
+完成後即可順利用 Google reCAPTCHA 來驗證使用者，相關設定可以自行參考 Google API [文件](https://developers.google.com/recaptcha/docs/verify)。
+
+![](/static/images/2021/Django/reCAPTCHA2.png)

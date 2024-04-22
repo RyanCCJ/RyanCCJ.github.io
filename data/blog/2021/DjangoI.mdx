@@ -1,0 +1,217 @@
+---
+title: 'Django (一) 基本介紹與環境架設'
+date: '2021-07-13'
+tags: ['程式','Python']
+draft: false
+summary: 'Django 系列文：介紹網站基礎知識以及 Python 環境和 Django 的安裝步驟'
+---
+
+## 目錄
+
+本篇是 Django 系列文的第一章，其他內容請參考以下連結：
+1. [Django (一) 基本介紹與環境架設](https://ryanccj.github.io/blog/2021/DjangoI)
+2. [Django (二) 模組功能與使用範例](https://ryanccj.github.io/blog/2021/DjangoII)
+3. [Django (三) 網頁模版與網址設計](https://ryanccj.github.io/blog/2021/DjangoIII)
+4. [Django (四) 資料庫與模型使用](https://ryanccj.github.io/blog/2021/DjangoIV)
+5. [Django (五) 表單設計與整合](https://ryanccj.github.io/blog/2021/DjangoV)
+6. [Django (六) 用戶登入與社群應用](https://ryanccj.github.io/blog/2021/DjangoVI)
+7. [Django (七) 網站部署與內容管理](https://ryanccj.github.io/blog/2021/DjangoVII)
+
+## 網站基礎知識
+
+在開始之前，我們先來認識網站基礎架構。
+
+首先，網站一般可分為「前端」與「後端」。前端是一般使用者透過瀏覽器 (Chrome、Safari、Firefox...) 所看到的各種資料，包含 html、css、js 所渲染 (render) 出來的美麗頁面。
+一般網頁前端工程師與設計師即是在滿足所需功能的前提下，努力將頁面做得美美的。
+
+至於後端則是負責連接主機 (Server) 與資料庫 (Database) 的地方，有時候還需要整合前端功能，進行後台的各種資料運算、分析，再將處理好的資訊送去給前端渲染，讓一般使用者能看到結果。
+
+Server 的架設可以使用一些軟體諸如 Apache、Nginx、Express，架在自己的主機或虛擬主機商提供的平台上。當使用者透過瀏覽器連接某個網址，其實是丟一個 request 給 Server 上的後端程式，後端則會根據需求回傳一個前端網頁，這樣瀏覽器就能接收並解讀成頁面資訊。
+
+例如，使用者輸入這篇文章的網址 [(https://ryanccj.github.io/blog/2021/DjangoI)](https://ryanccj.github.io/blog/2021/DjangoI)，即是連結到 ryanccj.github.io 這個網域中的「DjangoI」這篇文章代號。
+網站的後端會去資料庫中抓這篇文章，渲染成 html 網頁檔，丟給瀏覽器看。
+
+以上種種稱之為「靜態網站」。使用者只是丟網址，伺服器則是回傳內容，沒有更進一步的互動，基本上可視為資料連結而已。但如果是一個數據分析網站，當使用者上傳一個檔案，後端將其運算、分析後再傳回前端，這就涉及到前後端的即時互動，稱之為「動態網站」。
+
+後端的程式語言有很多種，像是 PHP、Perl、Ruby、Node.js、Python...，各有各的特色與適用範圍，甚至你要用 C 語言寫後端都沒問題。
+但目前比較常見的作法，是透過適當的網站框架 (web framework)，將前後端整合起來，再透過某些內容管理系統 (content manager system, CMS) 來降低後端維護的難度。
+
+以下要介紹的就是以 Python 為後端的網站框架 Django。
+
+## Django 的架構
+
+Django 是一個近年相當熱門的網站框架，其模組化設計、開源社群廣大，且可以輕易整合各種 python 套件，讓它成為功能非常齊全的網站框架。
+除了基本的電子商務、社群網站，亦適合架設各種為了數據分析、機器學習的網頁工具。
+
+在研究 Django 結構前，我們先來了解軟體工程常見的一種 MVC 架構。所謂 MVC，即模型 (Model)、視圖 (View)、控制器 (Controller)，分別介紹如下：
+
+- **Model**：資料模組，即連結後端資料庫的部分，通常包含如何定義與存取資料的程式。例如，定義該網站會員的帳密、郵件、個人資訊等。
+- **View**：視圖模組，也稱作表現層 (presentation layer)，即前端畫面的呈現，常見的是各種 html templates，像是網站的首頁、分頁、表單等。
+- **Controller**：控制模組，即介於前後端之間，負責處理用戶請求 (request) 的中繼程式。包含各種互動功能 (action)、表單資料接收、數據分析等。
+
+透過將應用程式模組化，可以將網站的複雜功能區分開來，專注在 Model、View、Controller 三個部分的開發。
+
+Django 繼承了傳統 MVC 架構，使用了自己的 MTV 架構，分別是 Model、Template、View。分別介紹如下：
+
+- **Model**：資料模組，主要設定是在 models.py 中。
+- **Template**：視圖模組，一般常見在 templates 資料夾內放置各種 html 模板。
+- **View**：控制模組（注意與 MVC 中的 View 不同），主要設定是在 views.py 與 urls.py中。
+
+當用戶發起 request（即瀏覽器輸入網址），Django 框架會在 urls.py 中尋找相應的動作，通常是工程師寫在 views.py 之中的某個功能函式、或是某個第三方服務（像是社群軟體登入）；有時候可能還會需要透過 models.py 去存取資料庫內容（像是會員註冊、留言）。
+當這一切流程跑完後，會將結果渲染到前端頁面去 (html templates)。
+
+![](/static/images/2021/Django/MTV.png)
+
+本次 Django 系列教學文將從環境架設開始，一步步帶你設定各個模組與套件，最終完成一個社群部落格平台。
+
+## 安裝與環境架設
+
+如果只是寫個小型程式，一般我們只要在自己的電腦環境下開發即可。但如果是開發大型專案，我們常常需要多人或是跨平台開發。有些人可能是用 Linux 或 Mac 系統，有些人用 Windows 系統，它們彼此之間目錄結構不同，常導致開發上的困難。
+另外，不同開發者可能安裝了不同的套件版本，其中的差異可能讓你花費大量時間 debug。
+
+有幾種方式可以解決以上問題：
+
+1. 統一在某個作業系統上開發（例如 Ubuntu），再透過虛擬機、遠端連線之類的方式，於自己習慣的開發環境下操作（例如 Windows）。
+2. 善用虛擬環境（例如 Virtualenv），控管你使用的套件版本。
+3. 善用版本控制（例如 Git），確保不同人之間整合結果良好。此外，也可協助我們透過網路連線，在不同電腦上開發。
+
+之後的教學中，有某些步驟是必須的，某些則是可以協助你的專案控管，我會進一步提醒與補充細節。
+
+### 安裝 Python
+首先，請確認你的電腦有沒有安裝過 Python。請打開終端機（Linux/Mac 稱作 Terminal，Windows 稱作 CMD），試著輸入以下指令：
+``` bash
+$ python --version
+```
+以筆者的電腦為例，會出現 ***Python 2.7***。
+
+這時，如果你輸入以下指令：
+``` bash
+$ python3 --version
+```
+以筆者的電腦為例，會出現 ***Python 3.8***。
+
+為什麼會有兩種版本呢？這是因為在 Python 開發的過程中，由於某些歷史因素，讓 Python2 與 Python3 同時存在市場中，彼此語法略有不同，但各有支持者。
+
+Mac 系統預設會有 Python2.7 [^1]，Linux Ubuntu 則預設 Python2.7 和 Python3.5，Windows 則沒有安裝 Python。當你用 Mac 或 Linux 執行 python 程式時，會輸入 python 或 python3，是取決於你要用哪種版本；當你使用 Windows 時，則需要先設定好環境變數。
+
+[^1]: 更新：2022 年 macOS Monterey 12.3 釋出後，不再預設安裝 Python2，相關說明可參考 [官方文件](https://developer.apple.com/documentation/macos-release-notes/macos-12_3-release-notes)
+
+若是還沒有安裝過 Python，可以進入 Python 官網的 [下載頁面](https://www.python.org/downloads/)，直接選擇最新的 Python 版本下載即可。
+
+### 安裝 Git
+
+> 此步驟非必要，目的是為了控管你的專案內容。
+
+Git 是一種常見的版本控制方式，至於什麼是版本控制？以及如何使用 Git？可以參考其他更詳細的教學，這邊就只先簡單說明如何安裝與設定 Git。
+
+首先，我們打開終端機，輸入以下指令：
+``` bash
+$ apt-get install -y git #安裝Git
+$ git config --global user.name "YOUR NAME" #設定的用戶名稱
+$ git config --global user.email "YOUR MAIL" #設定你的用戶信箱
+```
+之後，就可以將專案內容放在 GitHub、GitLab、Bitbucket 等地方，有系統的存取與協作同一個專案。
+在專案資料夾內，我們可以輸入以下指令來初始化 git：
+``` bash
+$ git init #初始化並產生.git隱藏資料夾，紀錄git動作
+$ git add .
+$ git commit -m "first commit"
+$ git remote add origin "YOUR GIT REPO URL" #http://...
+$ git push -u origin master
+```
+關於 Git 的進階操作，可以參閱這本免費 [電子書](http://git-scm.com/book/zh-tw/v2)。
+
+### 安裝虛擬機
+
+> 此步驟非必要，目的是為了控管你的專案內容。
+
+由於現行大部分的網站主機都以 Linux 為主，筆者建議在 Ubuntu 作業系統上開發你的 Django 網站。如果今天你的電腦系統不是 Linux，則可以考慮使用虛擬機 [^2]。
+
+[^2]: 更新：時至今日，[Docker](https://www.docker.com) 生態已相當成熟，建議可以使用 Docker 取代啟動緩慢的虛擬機
+
+首先至 [Ubuntu 官網下載頁](https://www.ubuntu-tw.org/modules/tinyd0/)，選擇自己需要的版本。通常是選擇 Ubuntu Desktop (桌面版)，穩定版本 (16.04～20.04)，64 位元（支持現行大部分電腦），選好後直接按「開始下載」即可。
+![](/static/images/2021/Django/Ubuntu.png)
+
+如果你是 Windows 用戶，可以選擇安裝 VMWare 或是 VirtualBox。VMWare 的個人免費版可至 [官網頁面下載](https://my.vmware.com/en/web/vmware/downloads/info/slug/desktop_end_user_computing/vmware_workstation_player/16_0)，請注意其他產品可能是要付費的。
+
+如果你是 Mac 用戶，可以選擇 Parallels 或 VirtualBox。在以往，Parallels 是要付費的，所以許多用戶只能選擇 VirtualBox，但是現在 VMWare 也推出了 Mac 專用的 [VMWare Fusion](https://www.vmware.com/tw/products/fusion.html)，且個人版完全免費，嘉惠眾人。
+
+當然，不論你是用 Windows 還是 Mac，都可以使用 [VirtualBox](https://www.virtualbox.org)。雖然功能與介面比較陽春，但拿來練習 Django 綽綽有餘。
+
+安裝虛擬機後，請啟動並選擇先前載好的 Ubuntu Desktop 鏡像檔。可能會碰到諸如硬碟容量、記憶體大小之類的設定，若沒特殊需求，全部選預設值就行。設定並安裝完畢後，就可以開始使用 Ubuntu 虛擬機了。
+
+在 Ubuntu 虛擬機中，首先可以將內部套件全部更新。請打開終端機執行以下指令：
+``` bash
+$ sudo apt update #更新套件庫
+$ sudo apt -y upgrade #更新套件
+```
+另外，可以安裝這個常用的 python 套件管理工具 (pip)：
+``` bash
+$ sudo apt -y install python3-pip
+```
+接著，請先查詢這台虛擬機的 IP 位置：
+``` bash
+$ ip a #查詢IP位置
+```
+為了讓外部電腦 (Windows or Mac) 能直接連接到你的 Ubuntu 系統，我們使用 SSH 與 FTP 的方式，方便下指令與傳遞檔案。請安裝以下兩個套件：
+``` bash
+$ sudo apt -y install openssh-server #安裝open ssh
+$ sudo apt -y install vsftp #安裝FTP
+```
+至此，Ubuntu 虛擬機就可以先縮小到角落去了，請回到個人電腦中。
+
+在 Windows 系統，可以使用 [PuTTY](https://www.putty.org) 程式來連接虛擬機。打開 PuTTY 後，在 Host Name (or IP address) 中輸入剛剛查到的虛擬機 IP 與 Port，接著在 connection 中設定每 60 秒傳送一個空的封包，避免 Server 因為太久沒資料傳輸（例如我們去倒杯咖啡）而中斷連線。
+
+設定完成後，輸入名稱（例如 Django Project）並儲存設定，接著按下 Open。初次連接會有一些安全問題，選 Yes 即可。
+
+在 Mac 系統，可以直接在 Terminal 中使用 ssh 指令來與虛擬機連線：
+``` bash
+$ ssh ... #輸入 ssh 指令
+```
+或是我們點選 Terminal 上方的 Shell > New Remote Connection...，將連線設定寫好，以後直接從這邊連接，就不用重打 ssh 指令了。
+
+另外停醒各位，Mac 系統與 Linux 系統都是以 Unix 為基底做成的，所以在目錄結構與終端機使用上都非常相似。如果是 Mac 用戶，也可以考慮直接在本地環境開發即可。
+
+如果各位有習慣使用的遠端工作站，一樣可以透過上述 ssh 和 FTP 的方式連接到 Server，就可以在 Server 上開發程式。
+
+### 安裝虛擬環境
+
+> 此步驟非必要，目的是為了控管你的專案內容。
+
+關於什麼是虛擬環境，請參考 [這篇文章](https://ryanccj.github.io/blog/2022/virtual-environment)，它與前文提過的虛擬機是不一樣的。
+本次教學將使用 Virtualenv，將環境建立在專案內（即上述連結的方法一），大家自行選擇習慣的方式即可。
+
+首先在電腦建立一個專案資料夾，接著輸入以下指令：
+``` bash
+$ pip install virtualenv #安裝虛擬環境
+$ cd "YOUR PROJECT DIR" #進入資料夾內
+$ virtualenv "YOUR VENV NAME" #建立虛擬環境，以下假設是VENV
+$ source VENV/bin/activate #啟動虛擬環境
+(VENV)$ ...
+```
+若之後要退出虛擬環境，隨時可以輸入以下指令：
+``` bash
+(VENV)$ deactivate #離開虛擬環境
+$ ...
+```
+
+### 安裝 Django
+
+如果你不是那麼在乎開發環境，單純想在本地電腦作測試，你可以跳過前面，直接來安裝 Django（當然，前提是你已經有 python 環境）。
+``` bash
+(VENV)$ pip install django #安裝Django
+(VENV)$ django-admin startproject "YOUR PROJECT NAME" #開始新專案，以下假設是mysite
+```
+如果我們進入剛剛建好的專案 (mysite)，會看到以下結構：
+``` bash
+(VENV)$ tree
+.
+├── manage.py
+└── mysite
+    ├── __init__.py
+    ├── asgi.py
+    ├── settings.py
+    ├── urls.py
+    └── wsgi.py
+```
+代表你的第一個 Django 專案已經建立完成。

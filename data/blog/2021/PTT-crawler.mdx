@@ -1,0 +1,165 @@
+---
+title: 'PTT 網頁爬蟲'
+date: '2021-08-07'
+tags: ['程式','Python']
+draft: false
+summary: '何謂網頁爬蟲？透過這個簡單的專案一步步教你如何實作'
+---
+
+什麼是「網頁爬蟲」？想像一下，如果我們要訓練一支機器學習程式來分析股票趨勢，第一步就是下載網路上歷年的股票資訊。然而，你可能找不到適合的工具或網站 API 來協助你下載大量數據，只能一頁一頁點開、自己慢慢抓資料...這將會是多麼沒效率的事情！
+
+實際上，只要了解網頁互動的原理，我們可以知道本地端只是將一個網址需求 (url request) 發送給伺服器，伺服器再將網頁回傳給本地端的瀏覽器。所有我們需要的資料早已經傳到我們電腦，我們只需要寫一支自動化程式來發送 request，再正確分析 html 中的資訊即可。針對不同網站，進行客製化的資料爬取，這就是網頁爬蟲。
+
+有了爬取方法，我們還必須有分析工具。分析 html 語言的套件有很多種，像是 lxml、PyQuery ...，這邊我們選擇最經典的 Beautiful Soup 4，因為中文教學資源頗多，一般來說已足夠堪用。相關使用可以參考 [官方文件](https://www.crummy.com/software/BeautifulSoup/bs4/doc.zh/)。
+
+**注意，以下程式皆使用 Python3 ，請先自行安裝相關環境。**
+
+首先，我們利用 pip 來安裝相關套件：
+```bash
+$ pip install requests
+$ pip install beautifulsoup4
+```
+接著，我們建立 python 檔案，引入剛剛的套件：
+```python
+# -*- coding: utf-8 -*-
+import requests, bs4
+
+...
+```
+這樣就可以開始我們的第一支網頁爬蟲。
+
+## 列出看板資訊
+
+要透過終端機來發送 requests，只需寫入以下內容即可。注意 url 參數應填上你要傳送的網址字串。
+```python
+url = "https://www.ptt.cc/bbs/Gossiping/index.html"
+response = requests.get(url)
+```
+![](https://i.imgur.com/aYpoylO.png)
+
+然而，如果我們直接這樣進入 PTT 的某些看板（如 Gossiping ），會發現無法成功登入，這是因為網站本身包含十八禁驗證。我們必須夾帶相關 cookie 才能順利登入：
+```python
+my_headers = {'cookie': 'over18=1;'}
+response = requests.get(url, headers = my_headers)
+```
+接著，我們的程式應該能順利進入以下頁面：
+![](https://i.imgur.com/fCGECKv.png)
+
+如果我們打開劉瀏覽器的開發人員工具 ( Chrome 按右鍵「檢查」，Safari 按右鍵「檢查元件」 )，可以肉眼觀察其 html 網頁的呈現方式。
+
+![](https://i.imgur.com/6hB8R3v.png)
+
+不難發現，所有文章都被放在 `<div class="r-ent">` 當中，至於推文數、作者、標題、時間，也都依序歸納在不同 class 下。只要適當利用 bf4 的語法 `find_all()`、`find()`，就可以精準抓到自己想要的資訊。請注意 `class` 因為在 python 中是保留字，所以 bf4 要使用 `class_`。
+
+我們將以上功能整理成一個函式如下，回傳值是 dictionary：
+
+```python
+def get_one_page(url):
+    my_headers = {'cookie': 'over18=1;'}
+    response = requests.get(url, headers = my_headers)
+    soup = bs4.BeautifulSoup(response.text,"html.parser")
+    articles = soup.find_all('div','r-ent')
+    push,title,link,author = [],[],[],[]
+    
+    for article in articles:
+        push.append(article.find(class_='nrec').text)
+        title.append(article.find(class_='title').text.strip()) #trip()是為了去掉換行空白
+        author.append(article.find(class_='author').text)
+        link.append("https://www.ptt.cc"+article.find(class_='title').a['href'])
+    
+    dict = {
+        'push': push,
+        'title': title,
+        'author': author,
+        'link': link
+    }
+    return dict
+```
+
+
+## 獲取內文
+
+### 標題資訊
+
+![](https://i.imgur.com/GGB1F8K.png)
+
+有了主頁的索引，我們就可以自動爬取文章內容。
+
+文章最頂端的 meta 資訊（包含「作者」、「標題」、「時間」...）都被放在 `<div class="article-metaline">` 中，「看板」則被另外放在`<div class="article-metaline-right">` 當中。項目名稱（如：時間）是在 `<span class="article-meta-tag">` ，項目內容（如： Tue Aug 24 2021 ）是在 `<span class="article-meta-value">` 。
+
+
+目前觀測到 PTT 的標題有幾種模式：
+1. 可能有看板資訊，也可能沒有（意即，可能沒有 article-metaline-right ），而且看板資訊可能與原始看板不一致！
+2. 三個 article-metaline，如：作者、標題、時間。
+3. 四個 article-metaline，如：發信人、標題、發信站、轉信站。
+4. 其他罕見例外，如：項目名稱錯亂。
+
+是故，直接抓第幾個 article-meta-value 就猜是「作者」還是「發信人」是相對不保險的，而且格式也可能不同。例如：「發信人」其實會回傳一個 list ，分別是加密過的信箱，以及發信人名稱。如果直接讀取內容會得到 `[email protected]` 訊息，需要進一步解碼。
+
+以下作法是先去讀取 meta-tag，再去判斷相應的 meta-value 要進行何種操作：
+```python
+header = soup.find_all('div', class_=['article-metaline','article-metaline-right'])
+author,board,title,time,source = '','','','',''
+    
+for i in range(len(header)):
+    meta_tag = header[i].find(class_=['article-meta-tag','article-metaline-right']).text
+    meta_value = header[i].find(class_='article-meta-value').text     
+    if (meta_tag=='作者'):
+        author = meta_value
+    elif (meta_tag=='發信人'):
+        array = meta_value.split(" ")
+        author = array[1][:len(array[1])-1]
+    elif (meta_tag=='看板' or meta_tag=='信區' or meta_tag=='站內'):
+        board= meta_value
+    elif (meta_tag=='標題' or meta_tag=='標  題'):
+        title = meta_value
+    elif (meta_tag=='時間'):
+        time = meta_value
+    elif (meta_tag=='發信站'):
+        array = meta_value.split("(")
+        source = array[0][:len(array[0])-1]
+        time = array[1][:len(array[1])-1]
+    elif (meta_tag=='轉信站'):
+        pass
+    else:
+        print("Mismatched meta-tag: {}, url: {}".format(meta_tag, url))
+```
+
+實際測試時，還是會有極少數例外的 meta_tag，像是：e作者、E作者、X作者、$作者...等奇怪資訊，或是英文項目名稱如： Posted by、Title、Date。在掃描時可能需要進 else 作個案處理。
+
+
+### 文章與留言
+
+![](https://i.imgur.com/mB2mxBk.png)
+
+PTT 的內文沒有特別放在某個 tag 中，所以只能讀取整個 `<div id="main-content">` ，再將不要的東西過濾出去。然而，要將內文、簽名檔、留言正確識別出來是非常困難的，因為沒有一定的規則可循（或是常有例外）。
+
+舉例一：如果用「- -」符號來切割字串，可能會切出唯一個區塊（只有內文，留言關閉，如 [這篇文章](https://www.ptt.cc/bbs/sttmountain/M.1211689409.A.3C6.html)），或是2～3個區塊（內文+簽名檔或留言），或甚至多個區塊（文章內部有「- -」）。
+
+舉例二：如果用綠字來區分，像是 `<span class="f2">` ，也不盡能代表留言，如 [這篇文章](view-source:https://www.ptt.cc/bbs/sttmountain/M.1211689410.A.974.html)。
+
+目前讀取內文比較可靠的作法是「刪除所有 `<div>` 內的資料」，因為內文是沒有 `<div>` 的，但會有 `<span>`。至於讀取留言比較可靠的作法是尋找「※ 發信站: 批踢踢實業坊(ptt.cc) 」這句話，只取其後的內容。當然，如果正文中也含有這句話就沒效了（常在轉信時發生）。
+
+至於「簽名檔」又更加困難，因為當有人引述他人的簽名檔時，很容易跟自己的簽名檔混淆，例如 [這篇文章](https://www.ptt.cc/bbs/joke/M.1517067281.A.A56.html)。
+
+是故，要找到一個完全正確的通解相當不容易，建議大家可以從以上思路自行客製化需要的判斷式。以下只提供移除掉標題資訊的方法：
+```python
+array = soup.find(id='main-content').text.split("\n")[1:]
+content = '\n'.join(array)
+```
+因為我爬文的目的是要將文章下載後，重新儲存成 yaml + markdown 格式。以上作法只要稍加修改，就可以順便處理 CommonMark 標準換行的 `空白` `空白` `enter`。
+```python
+array = soup.find(id='main-content').text.split("\n")[1:]
+content = '  \n'.join(array) # 全部改為md標準換行
+```
+
+最後需要注意的是，PTT 會自動偵測網頁爬蟲。如果爬文速度太快，可能會被封鎖 IP。所以我額外引入 time 模組，並在迴圈最末加上 delay 語法。
+```python
+import time
+
+...
+
+time.sleep(1)
+```
+
+完整程式碼都在 [Github](https://github.com/RyanCCJ/PTT-crawler) 上，可以自行參考。

@@ -1,0 +1,201 @@
+---
+title: 'Linux Kernel'
+date: '2023-03-01'
+tags: ['程式', 'Linux']
+draft: true
+summary: '整理有關 Linux Kernal 的基礎知識與常見的面試問題'
+---
+> 這篇文章整理有關 Linux Kernal 的基礎知識與常見的面試問題，內容僅供學習參考
+
+## User Mode & Kernel Mode
+Kernel Mode：能夠進行硬體操作與全部權限（開關機、寫入檔案）  
+User Mode：有限資源，只能存取部分記憶體，不能存取I/O
+
+如果 User mode 要使用硬體，就必須透過 system call，有三種資料傳遞方式：
+1. By Register：速度最快、容量最小
+2. By Address：將大量 memory address 存在 register 內，相對較慢
+3. By Stack
+
+## Process & Thread
+### Process
+1. process就是讀進記憶體內的program，也是thread的容器
+2. 一個CPU一次只能執行一個process，多個process就需要scheduling或是多個CPU，切換process稱為Context Switch
+3. Process 的 Context Switch 慢，管理成本高
+4. process 五個狀態
+
+![](/static/images/2023/linux-kernel/process.png)
+- new → ready: Job scheduler 允許工作進入系統，建立 process，配置記憶體空間載入程式碼
+- ready → running: CPU scheduler 由 ready queue 選擇一個 priority 最高的 process 到 CPU 執行，這裡會進行 context switch
+- running → waiting: 發生較長時間的中止時，如 I/O request、Semaphore operation、Receive Message 等，Process 會先 block 住
+- waiting → ready: 當造成 waiting 的事件已經完成，如 I/O complete 等，Process 會回到 ready 狀態
+- running → ready: 發生短暫中止時，如被高優先權的 process 插隊、CPU Time Quantum 超過、Interupt 等，Process 會直接回到 ready 狀態
+- running → terminated: 程式完成工作而正常結束，或是溢位、除零等異常終止 (Abort)
+
+### Thread
+1. 一個process可以有很多thread，負責不同的功能（例如聊天室可以同時接收訊息與發送訊息），Context Switch 快，管理成本低
+2. 同一個process底下的threads會共享資源（例如記憶體、變數），不同process則否
+3. 在multithread中，不同thread如果存取或改變某個全域變數可能產生同步問題，互搶資源可能產生死結deadlock
+
+## Scheduling
+### Scheduler 種類
+#### 1. Long-Term Scheduler
+- 又稱 Job Scheduler [new → ready]，從 Job Queue 中挑選適合的工作，將其載入 Memory 中準備執行
+- 執行頻率最低
+
+#### 2. Short-Term Scheduler
+- 又稱 CPU Scheduler [ready → running]，從 Ready Queue 挑選高優先度的 Process，使之獲得 CPU 控制權執行
+- 執行頻率最高
+
+#### 3. Medium-Term Scheduler
+- [virtual memory] 當記憶體空間不足，且又有其它 Process 欲進入記憶體執行，此時該 Scheduler 必須挑選某些 Process 將其 Swap Out 到磁碟中以空出記憶體空間，待記憶體有足夠空間再將其 swap in 記憶體中繼續執行
+
+### Scheduling Criteria
+
+衡量排班效能的準則:
+
+- CPU utilization: CPU 花在 process 執行的時間
+- Throughput: 單位時間內完成的 process 數目
+- Waiting time: process 待在 ready queue 等待獲取 CPU 的時間總和
+- Turnaround time: 一個 process 進入系統，到其完成工作的這段時間
+- Response time: 自 user 下命令進入系統，到系統產生第一個回應的時間
+
+### Scheduling Algorithms
+- First Come First Served Scheduling
+    - No Starvation
+    - Non-preemptive
+- Round Robin Scheduling
+    - No Starvation
+    - Preemptive
+- Priority Scheduling
+- Shortest Job First Scheduling
+    - Non-preemptive
+    - 排班效益最佳
+- Shortest Remaining Time First Scheduling
+    - Preemptive
+    - Context Switch 次數多
+
+## Paging
+分頁技術應用在虛擬記憶體(Virtual Memory)上，將一塊實體記憶體(Physical Memory)切成數個固定大小的頁框(Frame)，再將一塊虛擬記憶體切成數個固定大小的分頁(Page)，頁框和分頁的大小必須一樣，接著再藉由分頁表(Page Table)將各個分頁去對應實體記憶體的頁框(Frame)。
+
+### Page fault
+若要存取的分頁不存在於實體記憶體中，就會發生分頁錯誤(Page fault)，此時就需要替這個分頁尋找一個頁框來使用。
+
+#### Page Replacement
+- swap in: page to frame
+- swap out: frame to secondary memory
+
+由於移出移入(swap in/out)的動作需要許多時間來完成，因此我們會希望分頁替換的次數愈少愈好。也就是說，我們要讓分頁被替換後，再次發生分頁錯誤的機會降低。分頁錯誤的次數愈少，作業系統的運作效能就能愈好，同時也能減少對輔助記憶體的讀寫次數，延長硬體壽命。
+
+### Page Replacement Algorithm
+舉例：3 個 frame 與 A~E page
+- First in First out Page Replacement(FIFO)
+![](/static/images/2023/linux-kernel/page1.png)
+    - 實作起來最為容易
+- Least Recently Used Page Replacement(LRU)
+![](/static/images/2023/linux-kernel/page2.png)
+    - 需使用計數變數(Counter)去儲存每個在頁框內的分頁使用後閒置的時間(數字愈小表示愈久之前使用過)
+    - 實行起來成效顯著
+- The Clock Page Replacement (Second Chance)
+![](/static/images/2023/linux-kernel/page3.png)
+- Random Page Replacement
+![](/static/images/2023/linux-kernel/page4.png)
+- Optimal Page Replacement
+![](/static/images/2023/linux-kernel/page5.png)
+    - 將於實體記憶體頁框中，不會再次被使用或是最久才會再次被使用的分頁給取代掉
+    - 實作起來最非常困難，因為要預知未來可能會存取的分頁，但是這個將會是理想最佳解
+
+
+## Race Condition
+當多個thread修改同一個資源時，就有可能產生。
+例如 thread 1 作加一，thread 2 作減一，結果讀到同一個值，thread 2 結果覆蓋掉 thread 1。
+![](/static/images/2023/linux-kernel/race-condition.png)
+### 解決辦法
+1. Atomic 操作：原子操作可以讓資料存取的動作在不被中斷的情況下執行，避免資料讀取/寫入的過程被中斷而產生錯誤。
+    - 該 operation 是不可分割的 (all or nothing)
+    - eg. **a++** is not atomic ( contain Load, Add, Store)
+2. 使用 Critical Section：將存取共享資源的程式碼區塊定義為 critical section，只允許一個執行緒進入這個區塊進行操作，其他執行緒必須等待，避免同時存取造成的問題。
+    - **滿足解決 CS 問題有三個必要條件：**
+    - Mutual Exclusion (互斥鎖)
+    - Progress (有進展，prevent dead lock)
+    - Bounded waiting (有限等待，prevent starvation)
+    - **作業系統通常透過兩種方法處理 CS:**
+    - preemptive kernels (搶佔)
+    - nonpreemptive kernels (非搶佔)
+3. 使用互斥鎖 (Mutex Lock)：在資料存取的部分加上互斥鎖可以讓每個執行緒依序取用資料，避免同時存取造成的錯誤。
+    - 使用一個Boolean (binary Semaphore)來判斷是否進入CS
+    - Mutex 具備擁有者 (Owner) 的概念，只有所著 Mutex 的 Process，才具有解鎖的權限
+4. 使用讀寫鎖 (Read-Write Lock)：若讀取資料的操作遠多於寫入，使用讀寫鎖可以讓多個執行緒同時讀取資料，但只有一個執行緒能夠寫入。
+5. 信號 Semaphore：
+    - 可以設定 Acquire 的次數 (可連線數量)
+    - V operation: +1
+    - P operation: -1
+6. 使用訊息佇列 (Message Queue)：將需要存取共享資源的操作都放在佇列中，由專門的執行緒處理，避免同時存取資料造成的問題。
+7. Peterson’s algorithm (1981年)：
+![](/static/images/2023/linux-kernel/Peterson.png)
+
+### 比較
+隨著電腦硬體逐漸提供 atomic 指令後，mutex 或稱為 lock 的機制被列入作業系統的實作考量:
+
+- 需要進入 CS 時， 用 mutex/lock —— 上鎖/解鎖永遠是同一個 thread/process;
+- 需要處理 signalling 時，用 semaphore —— 等待/通知通常是不同的 threads/processes;
+
+簡言之，要搶資源時用 mutex，要互相通知時用 semaphore。
+
+- Mutex:
+一間可以容納 1 個人的房間，有一把鑰匙。
+只有一個人，和一把鑰匙。拿了鑰匙可以進去房間。
+A mutex is really a semaphore with value 1.
+- Semaphore:
+一間可以容納 N 個人的房間，沒有鑰匙。
+如果房間還沒滿，人就可以進去。
+如果房間滿了，就要等待有人出來。
+N = 1，稱為 Binary Semaphore，用來限制對某一個資源的同時間訪問。
+- Spinlock:
+內核態 (CPU Mode) 的概念
+Spinlock 是 busy waiting，Semaphore 是 sleep
+
+#### mutex 跟 semaphore差別:
+
+30秒：最大的差異在於 Mutex 只能由上鎖的 thread 解鎖，而 Semaphore 沒有這個限制，可以由原本的 thread 或是另外一個 thread 解開。另外，Mutex 只能讓一個 thread 進入 critical section，Semaphore 的話則可以設定要讓幾個 thread 進入。這讓實際上使用 Mutex 跟 Semaphore 場景有很大的差別。
+
+60秒 (cont.)：舉例而言，Mutex 的兩個特性：一個是只能有持鎖人解鎖、一個是在釋放鎖之前不能退出的特性，讓 Mutex 叫常使用在 critical section 只能有一個 thread 進入，而且要避免 priority inversion 的時候；Semaphore 也能透過 binary semaphore 做到類似的事情，卻沒有辦法避免 priority inversion 出現。(...待考證，兩者其實都可以用Priority Ceiling)
+
+120秒 (cont.)：而 Semaphore 更常是用在同步兩個 thread 或功能上面，因為 Semaphore 實際上使用的是 signal 的 up 與 down，讓 Semaphore 可以變成是一種 notification 的作用，例如 A thread 執行到某個地方時 B thread 才能繼續下去，就可以使用 Semaphore 來達成這樣的作用。
+
+### priority inversion
+> Priority Inversion is a problem in real-time systems and occurs mostly when you use a real-time kernel. 
+
+如下圖所示，原本 task1 的 priority 最高，但因為被 task3 CS 卡住，導致必須等 task3 執行完才能執行，造成 priority inversion
+
+![](/static/images/2023/linux-kernel/priority-inversion.png)
+
+修正方式：
+1. **Priority Inheritance（優先權繼承）**：當 task3 使用 CS 時，如果發生 priority inversion，將其 priority 繼承當前最高（盡快用完 CS），之後再降回原本階級（如下圖，避免 task2 插入 task1 前）
+2. **Priority Ceiling（優先權上限）**：將資源設定一個超高 priority 專門給使用該 CS 的 task 使用，使用後降為原本階級
+
+![](/static/images/2023/linux-kernel/priority-inversion2.png)
+
+## Dead Lock
+死結發生必須同時符合以下條件：
+- Mutual exclusion：一次只有一個程式能使用資源
+- Hold and Wait：程式需要複數資源執行，留住已取得資源等待未取得資源釋出
+- No Preemption：不能強迫程式放棄已拿到的資源
+- Circular Wait：程式的等待條件包含彼此之間執行完畢
+
+![](/static/images/2023/linux-kernel/deadlock-prevention.png)
+
+### 哲學家就餐問題 Dining philosophers problem
+**問題：** 五個哲學家圍繞圓桌，每人左右各一隻叉子（總共五隻），他們只能選擇吃飯（使用兩隻叉子）或冥想（wait）
+
+**解法：** 
+- 引入服務生，他會判斷誰可以用叉子（一次就要用兩隻，將拿左右叉子視為atomic），破除 hold and wait
+- 資源分級，將叉子編號，規定吃東西時只能先拿編號低的再拿編號高的，吃完時要先放下編號高的再放下編號低的，這樣永遠有一個人吃不到，破除 cicular wait。當需要取得很多複數資源時，效率會變差（必須按順序取得或放棄）
+- 限制就餐人數為4（可利用semaphroe），破除 cicular wait
+
+## I/O
+三種將資料在I/O間傳送的方法：
+- Polling：最簡單的方式讓I/O裝置與CPU溝通。I/O裝置只要將資訊放進狀態暫存器，CPU會周期性的檢查並取得資訊來得知需要服務的裝置。
+- Interrupt-driven I/O：利用interrupt的機制，當一個I/O裝置需要服務時，會發出interrupt來通知CPU（非同步 I/O）。
+- DMA(DirectMemoryAccess)：提供一個裝置控制器，讓I/O裝置能夠直接在記憶體做資料的傳輸，不需要CPU參與
+    - cycle stealing:DMA向CPU竊用機器週期，而直接向記憶體存取資料，因此CPU可與週邊装置的工作同時進行。萬一CPU與DMA對記憶體存取發生衝突，則給DMA較高的優先權(執行消耗小的先執行)。
+

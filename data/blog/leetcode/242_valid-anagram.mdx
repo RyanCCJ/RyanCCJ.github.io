@@ -1,0 +1,98 @@
+---
+title: 'LeetCode 242. Valid Anagram'
+date: '2024-04-15'
+tags: ['LeetCode']
+draft: true
+summary: 'Hash Table (Easy)'
+---
+
+## Description
+
+[![](https://img.shields.io/badge/Easy-green)](https://leetcode.com/problems/valid-anagram)
+
+Given two strings s and t, return true if t is an anagram of s, and false otherwise.
+
+An Anagram is a word or phrase formed by rearranging the letters of a different word or phrase, typically using all the original letters exactly once.
+
+
+Example 1:
+```
+Input: s = "anagram", t = "nagaram"
+Output: true
+```
+
+Example 2:
+```
+Input: s = "rat", t = "car"
+Output: false
+```
+
+### Constraints:
+
+- `1 <= s.length, t.length <= 5 * 104`
+- s and t consist of lowercase English letters.
+ 
+**Follow up:** What if the inputs contain Unicode characters? How would you adapt your solution to such a case?
+
+## Python
+
+Approach 1:
+```python
+class Solution:
+    def isAnagram(self, s: str, t: str) -> bool:
+        dic = {}
+        if len(s)!=len(t):
+            return False
+        for c1 in s:
+            if c1 in dic:
+                dic[c1] += 1
+            else:
+                dic[c1] = 1
+        for c2 in t:
+            if c2 not in dic or dic[c2]==0:
+                return False
+            else:
+                dic[c2] -= 1
+        return True  
+```
+- Time Complexity: O(n), loop2 `c2` break if count=0
+- Space Complexity: O(n)
+- Run Time: 54ms (33.11%)
+- Memory: 16.93MB (64.81%)
+
+Approach 2:
+```python
+class Solution:
+    def isAnagram(self, s: str, t: str) -> bool:
+        dic = {}
+        if len(s)!=len(t):
+            return False
+        for i in range(len(s)):
+            if s[i] in dic:
+                dic[s[i]] += 1
+            else:
+                dic[s[i]] = 1
+            if t[i] in dic:
+                dic[t[i]] -= 1
+            else:
+                dic[t[i]] = -1
+        for j in dic.values():
+            if j!=0: return False
+        return True 
+```
+- Time Complexity: O(n), but loop `j` is smaller than loop `i`
+- Space Complexity: O(n)
+- Run Time: 56ms (24.07%)
+- Memory: 17.02MB (34.17%)
+
+Approach 3:
+```python
+class Solution:
+    def isAnagram(self, s: str, t: str) -> bool:
+        from collections import Counter
+        return Counter(s)==Counter(t)
+```
+- Time Complexity: ?
+- Space Complexity: ?
+- Run Time: 43ms (84.92%)
+- Memory: 16.96MB (64.81%)

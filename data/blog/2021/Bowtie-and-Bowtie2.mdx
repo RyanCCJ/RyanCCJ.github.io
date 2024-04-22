@@ -1,0 +1,217 @@
+---
+title: 'Bowtie & Bowtie2 基因序列比對工具'
+date: '2021-08-26'
+tags: ['NGS']
+draft: false
+summary: 'Bowtie2 是目前最主流的基因比對工具之一，這篇文章將簡單介紹如何使用 Bowtie2'
+---
+
+## 前言
+
+> Bowtie is an ultrafast, memory-efficient short read aligner. It aligns short DNA sequences (reads) to the human genome at a rate of over 25 million 35-bp reads per hour.
+
+![](/static/images/2021/Bowtie-and-Bowtie2/mapping.png)
+
+這是一個用來將基因片段 (read) 配對進整條基因 (reference) 的工具，透過演算法判斷最有可能的基因片段位置。
+舊版 Bowtie 只能偵測字元不匹配 (mismtach) 的情況，新版 Bowtie2 還可以判斷字元不見 (gap) 的情況，而且運算速度更快。兩者參數、檔案皆不互通，以下教學僅提供 Bowtie2 的三支主程式。[^1]
+
+[^1]: B. Langmead and S. L. Salzberg, “Fast gapped-read alignment with Bowtie 2,” Nature Methods, vol. 9, no. 4, pp. 357–359, Mar. 2012, doi: https://doi.org/10.1038/nmeth.1923.
+
+- [Bowtie 官方文件](http://bowtie-bio.sourceforge.net/manual.shtml)
+- [Bowtie2 官方文件](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
+
+### 安裝方式
+
+要安裝 Bowtie，可以透過 PyPI
+```bash
+$ pip install bowtie
+```
+或是開啟 conda 虛擬環境，切換到 bioconda，下載 bowtie
+```bash
+$ conda install -c conda-forge bowtie-py
+```
+---
+
+要安裝 Bowtie2，可以透過 Ubuntu package manager
+```bash
+$ apt install bowtie2
+```
+或是開啟 conda 虛擬環境，切換到 bioconda，下載 bowtie2
+```bash
+$ conda install -c bioconda bowtie2
+```
+
+或是直接下載 [source code](https://sourceforge.net/projects/bowtie-bio/files/bowtie2/)，透過 GNU make 的方式編譯原始碼
+
+## 1. bowtie2-build
+> `bowtie2-build` builds a Bowtie index from a set of DNA sequences. `bowtie2-build` outputs a set of 6 files with suffixes .1.bt2, .2.bt2, .3.bt2, .4.bt2, .rev.1.bt2, and .rev.2.bt2.
+
+執行這支程式，可以將 DNA sequences (.fa) 建立成 bowtie2 需要的 index 檔案 (.bt2)。
+
+它使用 [Karkkainen's blockwise algorithm](https://dl.acm.org/doi/10.1016/j.tcs.2007.07.018)，可以自己設參數調整時空效率。預設會將記憶體用到極致，以求運算速度最大化。
+
+### 使用方式
+```bash
+$ bowtie2-build <reference_in> <bt2_base> [options]
+```
+
+- `<reference_in>`：str1.fa,str2.fa,str3.fa,...
+- `<bt2_base>`：str，會在當前路徑產生 str.1.bt2,str.2.bt2,...。可以先建好資料夾( eg. index )，再輸入 index/str ，就會輸出在資料夾內。
+
+## 2. bowtie2-inspect
+> `bowtie2-inspect` extracts information from a Bowtie index about what kind of index it is and what reference sequences were used to build it. When run without any options, the tool will output a FASTA file containing the sequences of the original references.
+
+執行這支程式，可以將 bt2 檔案反整理回 fa 檔，或是擷取出重要的資訊。通常比較少用到。
+
+### 使用方式
+```bash
+$ bowtie2-inspect <bt2_base> [options]
+```
+
+- `<bt2_base>`：str，會在當前路徑中尋找 str.1.bt2,str.2.bt2,...
+
+
+##  3. bowtie2
+> `bowtie2` takes a Bowtie 2 index and a set of sequencing read files and outputs a set of alignments in SAM format.
+
+最重要的程式，負責將 read 與 build 後的 reference 進行配對。
+
+### 可能情況
+
+- mismatch：某個字元沒對到
+```
+Read:      TCGACTTCG
+           ||||| |||
+Reference: TCGACATCG
+```
+- gap：缺少某個字元（可能發生在 read 或 reference)
+```
+Read:      TCGAC-TCG
+           ||||| |||
+Reference: TCGACATCG
+```
+
+### 配對方法
+
+- End-to-end alignment ( default )
+
+在 reference 中搜尋所有可配對 read 的字元
+```
+Read:        GACTGGGCGATCTCGACTTCG
+Reference:   GACTGCGATCTCGACATCG
+
+Alignment:
+  Read:      GACTGGGCGATCTCGACTTCG
+             |||||  |||||||||| |||
+  Reference: GACTG--CGATCTCGACATCG
+```
+
+- Local alignment ( --local )
+
+自動修剪 read 的兩端以求最大相似度
+```
+Read:        ACGGTTGCGTTAATCCGCCACG
+Reference:   TAACTTGCGTTAAATCCGCCTGG
+
+Alignment:
+  Read:      ACGGTTGCGTTAA-TCCGCCACG
+                 ||||||||| ||||||
+  Reference: TAACTTGCGTTAAATCCGCCTGG
+  ```
+  
+- Score 打分數
+
+原始分數 0 分，再將每個符合處加分 (match bonus)，不符合處扣分 (penalty)。分數超過 threshold 才會被視為 valid 。
+```
+--ma (match bonus, only in local alignment) Default: 2
+--mp (mismatch penalty) Default: 2~6
+--np (penalty for having an N) Default: 1
+--rdg (read gap penalty) Default: 5,3
+--rfg (reference gap penalty) Default: 5,3
+```
+範例：
+```
+Read:     GACTG--CGATCGACTTCG ... ACG  (length=50)
+          |||||  |||||||| ||| ... |||
+Reference:GACTGGGCGATCGACATCG ... ACG
+```
+Score ( end-to-end ): gap open (-5) + gap extension (-3\*2) + mismatched at a high-quality position (-6) = -17
+
+Score ( local ): -17 + match bonus (2*49) = 81
+
+- Mapping quality 配對品質
+
+read 可能對到很多 reference 分數都超過 threshold。配對品質越高，代表某個配對可能性越突出 (uniqueness)。
+
+MAPQ = -10*log( p )，p 是配對錯誤的機率
+
+### 配對結果
+
+- Default：尋找最佳解
+
+尋找最佳解的方式不是先找出所有解，再找出最佳解，而是透過 dynamic programing 將 read 拆解成許多小序列再進行配對，所以運算效率會受限於拆解方式
+
+參數 -D, -R：越高就算越準，但越花時間
+
+- K mode：尋找複數可能
+
+例：-k 2 代表尋找兩個解（不一定是最佳解）
+
+- A mode：尋找所有可能
+
+例：-a，注意可能會算得很久～
+
+### 使用方式
+```bash
+$ bowtie2 -x <bt2-idx> -U <r> -S <sam> [options]
+```
+
+- `-x <bt2-idx>`：build 出來的 .bt2 index 名稱 ( eg. str )
+- `-U <r>`：要比對的基因片段檔案 ( eg. read.fq )
+- `-S <sam>`：輸出的檔案 ( eg. output.sam )
+
+### 其他參數
+
+- -p：使用平行處理，加快運算
+- -f：讀入 .fa 而不是 .fq
+- -L：每個 seed 的長度
+- -i：每個 seed 的位移，是一個以 read 長度為變數的公式，例如 -i S,1,2.5 代表 f(x) = 1 + 2.5 * sqrt(x)
+- -\-score-min：設定配對分數的 threshold ( 一個以 read 長度為變數的 function )
+- -\-norc：不要配對 reverse-complement
+- -\-no-unal：輸出檔案不含配對失敗的序列
+- -\-no-hd：輸出檔案不含標頭，如 @HD, @SQ, @PG, ...
+
+以下效率參數由「速度快」～「算得準」：
+
+- -\-very-fast(-local)
+- -\-fast(-local)
+- -\-sensitive(-local) 預設值
+- -\-very-sensitive(-local)
+
+### 輸出結果
+詳細內容請參考 [文件](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#sam-output)，或是補充資料 ( [SAM format](http://samtools.github.io/hts-specs/SAMv1.pdf) )
+
+- 1: read 名稱
+- 3: reference 名稱，沒對到會是「 * 」字號
+- 4: 配對起始位置 ( 從 1 開始 )
+- 5: 配對品質
+- 6：[CIGAR](https://sites.google.com/site/bioinformaticsremarks/bioinfo/sam-bam-format/what-is-a-cigar)，標記配對結果 ( M: match or mismatch、D: read open、I: ref open )
+- 10: read 序列內容
+- AS:i: 比對分數
+- XM:i: mismatche 數量
+- XO:i: gap open 數量
+- XG:i: gap extension 數量
+- MD:Z: mismatch 與 read open 的位置，請參考 [文件](https://samtools.github.io/hts-specs/SAMtags.pdf) 第三頁
+
+## 補充
+
+- 類似工具：[Burrows-Wheeler Aligner (BWA)](http://bio-bwa.sourceforge.net) [^2]
+- [HYB](https://github.com/gkudla/hyb/) 使用的 Bowtie2 參數：[^3]
+    - -D 20 -R 3 -N 0 -L 16 -i S,1,0.50，類似 very-sensitive，只是 seed 長度設更短
+    - -k 20 尋找前20個解 ( 不一定是最佳解 )
+    - -\-local 會自動修剪 read 兩端來尋求最佳配對
+    - -\-score-min L,18,0 設定 threshold 最低 18 分
+    - -\-ma 1 -\-mp 2,2 -\-np 0 -\-rdg 5,1 -\-rfg 5,1 設定打分數方式
+
+[^2]: H. Li, “Aligning sequence reads, clone sequences and assembly contigs with BWA- MEM.,” arXiv, May 2013, doi: https://doi.org/10.48550/arXiv.1303.3997.
+[^3]: Travis, Anthony J, et al. “Hyb: A Bioinformatics Pipeline for the Analysis of CLASH (Crosslinking, Ligation and Sequencing of Hybrids) Data.” Methods, vol. 65, no. 3, pp. 263–273, Feb 2014, https://doi.org/10.1016/j.ymeth.2013.10.015.

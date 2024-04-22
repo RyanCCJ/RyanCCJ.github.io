@@ -1,0 +1,154 @@
+---
+title: 'Traversal'
+date: '2024-04-17'
+tags: ['程式', 'algorithm', 'Python']
+draft: true
+summary: '整理有關 Traversal 的基礎知識與常見的面試問題'
+---
+
+![](/static/images/2023/algorithm/DFS.png)
+## Depth-First-Search (DFS)
+- preorder: root - left - right
+- inorder: left - root - right, important for BST
+- postorder: left - right - root
+- Time Complexity: O(n)
+- Space Complexity: O(1), output space is not counted
+
+### 1-1. Recursion
+```python
+def inorderTraversal(self, root: Optional[TreeNode]) -> List[int]:
+    res = []
+    def traverse(node):
+        if node:
+            # left > root > right, change order in other situation
+            traverse(node.left)
+            res.append(node.val)
+            traverse(node.right)
+    traverse(root)
+    return res
+```
+### 1-2. Recursion in One-line
+```python
+def preorder(root):
+    return [root.val] + preorder(root.left) + preorder(root.right) if root else []
+
+def inorder(root):
+    return  inorder(root.left) + [root.val] + inorder(root.right) if root else []
+
+def postorder(root):
+    return  postorder(root.left) + postorder(root.right) + [root.val] if root else []
+```
+
+### 2-1. Iteratively
+```python
+def inorder(root): # important !!
+    res, stack = [],[]
+    curr = root
+    while curr or stack:
+        if curr:
+            stack.append(curr)
+            curr = curr.left
+        else: 
+            curr = stack.pop()
+            res.append(curr.val) # <- add after all left children
+            curr = curr.right
+    return res
+
+def preorder(root):
+    res, stack = [],[]
+    curr = root
+    while curr or stack:
+        if curr:
+            stack.append(curr)
+            res.append(curr.val) # <- add before going to children
+            curr = curr.left
+        else:
+            curr = stack.pop()
+            curr = curr.right
+    return res
+
+def postorder(root):
+    res, stack = [], []
+    curr = root
+    while curr or stack:
+        # root > right > left
+        if curr:
+            stack.append(curr)
+            res.append(curr.val) # <- add before going to children
+            curr = curr.right
+        else:
+            curr = stack.pop()
+            curr = curr.left
+
+    # reverse: left > right > root
+    return res[::-1]
+```
+
+### 2-2. Iteratively
+
+which is more simple, but can't be used in **Inorder**.
+
+```python
+def preorder(root):
+    res, stack = [], [root]
+    while stack:
+        node = stack.pop()
+        if node:
+            # root > left > right
+            res.append(node.val)     # <- add value in res[]
+            stack.append(node.right) # <- fisrt in
+            stack.append(node.left)  # <- last in 
+    return res
+
+def postorder(root):
+    res, stack = [], [root]
+    while stack:
+        node = stack.pop()
+        if node:
+            # root > right > left
+            res.append(node.val)     # <- add value in res[]
+            stack.append(node.left)  # <- fisrt in
+            stack.append(node.right) # <- last in  
+            
+    # reverse: left > right > root
+    return res[::-1]
+```
+
+## Breadth-First Search (BFS)
+- level order
+
+### 1. Recursion
+```python
+def levelorder(root):
+    res = []
+    if not root: return res
+
+    def check(node, level):
+        if not node: return
+        if level == len(res):
+            res.append([node.val])
+        else:
+            res[level].append(node.val)
+        check(node.left, level+1)
+        check(node.right, level+1)
+
+    check(root, 0)
+    return res
+```
+
+### 1. Iteratively
+```python
+def levelOrder(self, root: Optional[TreeNode]) -> List[List[int]]:
+    res, queue = [], []
+    if root:
+        queue.append(root)
+    while queue:
+        level = []
+        for _ in range(len(queue)):    
+            node = queue.pop(0)
+            level.append(node.val)
+            if node.left: queue.append(node.left)
+            if node.right: queue.append(node.right)
+        res.append(level)
+    return res
+```
