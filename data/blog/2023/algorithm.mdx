@@ -6,6 +6,22 @@ draft: true
 summary: '整理有關演算法的基礎知識與常見的面試問題'
 ---
 
+## Array (list)
+
+- 不能用 [ [0] * n ] * m 的方式生成 m*n 二維陣列，每個 m 的 address 一樣
+    - 正解：[ [0] * n for _ in range(m) ]
+- 用 = 來指派（address相同），用 copy() 來複製
+    - 複製：r = l.copy(), r = list(l), r = l[:]
+- sort() 會更動原先序列，sorted() 會產生新序列
+- 可用來建立 queue (pop(0)), stack (pop())
+    - list 建立 **queue 效率較差**，可以使用 from collections import deque
+
+## Sort
+- 平均最佳：Merge Sort，時間 O(log n) 空間 O(log n)
+- 空間相對較佳：Quick Sort，時間 O(log n) - O(n^2) 空間 O(1) in-place
+- 上限較佳：Bucket Sort，時間 O(n) - O(log n)，空間 O(log n)
+- 通常較差：Bubble Sort、Insertion Sort、Seletion Sort 時間 O(n^2)
+
 ## Hash Table
 
 - LeetCode: 1, 242, 1512

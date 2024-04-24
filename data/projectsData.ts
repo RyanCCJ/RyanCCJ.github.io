@@ -28,7 +28,7 @@ const projectsData: Project[] = [
     As core members of the NLP Group at NCKU, our main goal is to promote the use of natural language processing in 
     TensorFlow and PyTorch. We aim to create applications such as document summarization and ChatBot.`,
     imgSrc: '/static/images/project/GDSC.jpg',
-    href: '/blog/2022/GDSC',
+    href: '/blog/2023/GDSC',
   },
   {
     title: 'Seed Project: Canada Alpine Training',
@@ -92,16 +92,16 @@ const projectsData: Project[] = [
     It involves using resonant magnetic coupling circuits to facilitate power transfer. The project 
     encompasses the derivation of relevant formulas, coil model design, and analysis, with a particular 
     focus on the phenomenon of frequency splitting.`,
-    imgSrc: '/static/images/project/WPT.jpg',
-    href: '/blog/2021/resonant-circuits-for-WPT',
+    imgSrc: '/static/images/2018/WPT/title.jpg',
+    href: '/blog/2018/WPT',
   },
   {
     title: 'Buck Converter for Energy Harvesting',
     description: `Exploration of the conversion mechanism of the DC-DC converter in Energy Light Harvesting System. 
     To address the shortcomings of traditional linear converters, the utilization of switch circuits and 
     energy storage components for voltage conversion is employed to reduce energy loss. Additionally, there is a focus on minimizing noise levels in component design.`,
-    imgSrc: '/static/images/project/solar_panel.png',
-    href: '/blog/2021/buck-converter',
+    imgSrc: '/static/images/2017/buck-converter/solar_panel.png',
+    href: '/blog/2017/buck-converter',
   },
   {
     title: 'Poker Card Big Two Playing Robot',
