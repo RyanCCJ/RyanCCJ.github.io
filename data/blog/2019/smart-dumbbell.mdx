@@ -1,0 +1,102 @@
+---
+title: 'Smart Dumbbell Chip Development'
+date: '2019-11-01'
+tags: ['Code', 'C']
+draft: false
+summary: 'We create a smart dumbbell that can detect whether the movements of rehabilitation patients are correct.'
+---
+
+![](/static/images/2019/smart-dumbbell/title.png)
+
+## 簡介
+
+**智慧啞鈴 (Smart Dumbbell)** 是由包含我在內，三名成大電機系大學生與三名工業設計系碩士生合作開發的專案。
+工設系負責整合人因設計，電機系負責組裝硬體與開發嵌入式晶片 Arduino。
+在這個專案中，我主要負責韌體實作跟測試，以及協助部分電路的焊接工程。
+這項專案最終由工設系發表成碩士論文，並入圍圓夢計畫，於 IEEE CONMEDIA 發表。 [^1]
+
+## 緣起
+
+隨著醫療技術的發達，人口壽命延長，老年人口也逐漸增加。
+**肌肉減少症 (Sarcopenia)** 的罹患率年年增高，導致高齡者身體功能下降、跌倒風險上升與死亡風險增加等相關問題。
+我們認為，針對高齡人口的肌肉復健，只做有氧運動是不夠的。
+搭配適當的阻力訓練（例如使用啞鈴、壺鈴、彈力帶），可以幫助肌肉合成並提升肌力。
+阻力訓練除了對日常生活有幫助外，強度和比例越高在增加骨質密度上亦有正向效果。
+
+我們與業界專家訪談的結果，目前台灣於長期照護與老人照護的現況，採取以下兩種做法：
+- 長照 2.0 提供 ABC 級照護服務 (參考下圖)
+- 推行預防及延緩失能照護計畫
+
+<img src="/static/images/2019/smart-dumbbell/ABC-care.png" width='500'/>
+
+有些照護中心會由一名教練 (教練/護士/物理治療師) 指導 12-15 名高齡者做操 (無手持器材)。
+有鑑於此，我們希望藉由一款阻力運動器材提升高齡者運動時的興趣與動機，同時兼顧安全以及運動成效。
+
+##  人因設計
+
+我們參考文獻並討論出適合抓握與動作的尺寸和重量，交由工業設計系的學生建立模型，並使用 3D 列印機製造出產品原型。
+
+<img src="/static/images/2019/smart-dumbbell/ergonomics1.png" width='600'/>
+<img src="/static/images/2019/smart-dumbbell/ergonomics2.png" width='600'/>
+![](/static/images/2019/smart-dumbbell/ergonomics3.png)
+
+## 操作過程
+
+![](/static/images/2019/smart-dumbbell/how-to-use.png)
+
+智慧啞鈴的設計情境是由一位教練帶領一群學員進行阻力訓練。
+每台啞鈴功能一致，透過一顆 switch button 來切換教練或學員模式，再藉由無線傳輸模組進行配對。
+
+### 教練
+- 按下開關，啞鈴閃藍色燈條表示開機
+- 平時呈現平衡燈，輔助教練動作
+- 按下開關即開始錄動作 (閃呼吸燈)，再按一次結束記錄
+- 長期不用自動關機 (閃藍燈)
+
+### 學員
+- 按下開關，啞鈴閃藍色燈條表示開機
+- 平時呈現平衡燈，輔助老人動作
+- 跟隨教練動作，若做對顯示綠燈，若做錯閃爍紅燈
+- 長期不用自動關機 (閃藍燈)
+
+## 電路設計
+
+<img src="/static/images/2019/smart-dumbbell/components.png" width='470' class='inline-block' style={{margin:'auto'}}/>
+<img src="/static/images/2019/smart-dumbbell/prototype.png"  width='282' class='inline-block' style={{margin:'auto'}}/>
+
+智慧啞鈴主要使用 Arduino Nano 開發板，搭配鋰電池充電模組、nRF24L01 2.4G 無線傳輸模組，以及 GY-85 九軸感測器模組。
+透過 PSpice 軟體進行電路設計與 layout，並手動焊接 20 顆 LED 燈條，最終將成品組裝在 PCB 板上。
+
+<img src="/static/images/2019/smart-dumbbell/schematic.png" width='500'/>
+
+## 程式設計
+
+智慧啞鈴透過一個全域變數來記錄自身處於 **教練機 (master)** 、 **學員機 (slave)** 或是 **睡眠** 狀態，以此決定其後續運作邏輯。
+處於教練機時，nRF24L01 無線傳輸模組會設定其為訊息傳送端，採用 SPI (Serial Peripheral Interface) 介面與開發板相連接，以 unsigned long int 儲存動作數據。
+一旦教練開始記錄動作，GY-85 九軸感測器（包含三軸加速器、陀螺儀、磁力計）會紀錄其三軸加速度，轉換成 g 之後便可以透過公式進一步推算其三軸傾角：
+
+$$ \theta_{x} = tan^{-1} \left[\frac{A_x}{\sqrt{(A_y)^2\;+\;(A_z)^2}} \right] \times \frac{180}{\pi} $$
+
+$$ \theta_{y} = tan^{-1} \left[\frac{A_y}{\sqrt{(A_x)^2\;+\;(A_z)^2}} \right] \times \frac{180}{\pi} $$
+
+$$ \theta_{z} = tan^{-1} \left[\frac{A_z}{\sqrt{(A_x)^2\;+\;(A_y)^2}} \right] \times \frac{180}{\pi} $$
+
+GY-85 每 0.1s 取樣一次，直到教練完成動作錄製。教練機將數據發送至學員機，學員機則將動作數據保存在記憶體內。
+在學員依據指示動作期間，GY-85 會持續記錄其角度變化並與教練的數據做比對，一旦發現超過某個 margin，便會跳出偵測迴圈並以紅色 LED 閃燈提醒使用者；反之若順利完成動作，便會閃爍綠燈表示正確。
+
+<img src="/static/images/2019/smart-dumbbell/workflow.png" width='600'/>
+
+透過以上設計，教練與學員之間可以透過智慧啞鈴持續互動，且能夠在一對多的情境中迅速發現某位學員的動作不夠標準，以此改善教學品質，達到精進訓練或復健之目的。
+
+## 成果
+
+此專案原為電機系上單晶片系統設計課程的期末專題，透過與工設系碩士班學生的合作，賦予與眾不同的意義。
+我們不但順利完成原型機並公開對外展示，更進一步以此撰寫相關論文，讓碩士班學生順利畢業。
+因為對方有一位來自印尼的留學生，整個合作過程我們必須以全英文溝通。
+這個專案最終入園印尼的圓夢計畫，並將成果發表在 2019 IEEE CONMEDIA conference。 [^1]
+
+<img src="/static/images/2019/smart-dumbbell/paper.png" width='200' class='inline-block' style={{margin:'auto'}}/>
+<img src="/static/images/2019/smart-dumbbell/paper2.png" width='310' class='inline-block' style={{margin:'auto', padding:15}}/>
+
+[^1]: Elizabeth Wianto, YH Chen, CY Chang, YY Tung, ZC Sheng, **CJ Chung**, CH Chen, YC Lin, "Enhancing Quality of Life based on Physical Activity for Indonesian Elderly: A Preliminary Study for Design
+Recommendation", IEEE CONMEDIA, Oct 2019, ISBN: 978-1-7281-0725-7

@@ -1,8 +1,62 @@
 ---
 title: 'Google Developer Student Club'
 date: '2023-01-30'
-tags: ['程式', 'Python', 'AI']
-draft: true
-summary: '整理有關演算法的基礎知識與常見的面試問題'
+tags: ['Code', 'Python', 'AI']
+draft: false
+summary: '在成大 GDSC 社群中，以核心成員的身份參與 Natural Language Processing (NLP) 技術的研究，包含課程規劃與專案實作'
 ---
 
+![](/static/images/2023/GDSC/GDSC-Taiwan.png)
+
+> Google Developer Student Clubs (GDSC) 是一個由 Google 支持的學生社群，旨在通過學生與專業開發人員聯繫，促進學生對 Google 開發人員技術的學習和應用，並為學生提供與技術專家互動和學習的機會。 
+
+Google 相當注重人才技術的培育和相關社群的推廣，除了針對開發者的 Google Developer Groups ([GDG](https://gdg.tw)) 社群，還有針對學生的 [GDSC](https://gdg.tw/about/gdsc/) 社群。
+透過定期舉辦工作坊與主題式討論，讓學生能夠學習運用 Google 的各種技術，例如 Data Analysis、Cloud Computing、Artificial Intelligence 等等。
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/earTjC0iSjg?si=ZiTlHx4bS-Q06WrD" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+去年下旬在成大舉行了第二屆的 GDSC 成員徵選，我有幸參與其中三個小組的活動：
+
+1. 以講師的身份參與 **Python 教學組**，目標是在學期初快速帶領各小組成員入門 Python 程式語言，以利其他活動的推行。
+2. 以一般組員的身份參與 **GCP 研究組**，目標是嘗試使用 Google Cloud Platform 上的各種功能，並在其中負責簡報 Google Kubernetes Engine (GKE) 的使用方法。
+3. 以 Core Member 的身份參與 **NLP 研究組**，目標是規劃整學期的活動，向社群成員推廣自然語言處理 (Natural Language Processing) 的技術。
+
+成大 GDSC NLP 研究組是由包含我在內，由六個電資領域的學生所構成的團體。
+因為我身為核心成員，完整參與兩個學期的活動，下文將以 NLP 組的介紹為主。
+
+## 課程與講座
+
+在 NLP 組中，我們規劃上學期以課程為主，下學期則偏向專案實作。
+課程部份從 Python 常用套件入門，包含資料處理、視覺化套件 Numpy、Pandas、Matplotlib，和聲音、文字處理套件 Librosa、NLTK，以及深度學習套件 Tensorflow、PyTorch、Keras 等，並以 IMDB review 讓學生實作第一個簡單的範例。
+
+第二、三週以實例來講解 AI 基礎知識，例如 Gradient Descent、Loss Function、Activation Function，以及 Convolution Neural Network (CNN)、Recurrent Neural Network (RNN) 的基本概念。
+第四週進入到傳統 NLP 的領域，包含如何建立 Word Vector，以及學習使用 LSTM 模型來實作 Twitter 留言的情感分析。
+第五週討論 Seq2Seq 模型以及 attention 機制，第六週討論 Transformer 與 Bert 模型，並從 Hugging Face 上下載 CNN DailyMail，實作簡單的文件摘要。
+
+除了一般課程，我們也有舉辦講座，邀請 Google 工程師來成大分享個人經驗與職涯建議，展示如何將自然語言技術應用於專案上，替上學期的社團活動留下完美的收尾。
+
+<img src="/static/images/2023/GDSC/lecture1.jpg" width='300' class='inline-block' style={{margin:'auto'}}/>
+<img src="/static/images/2023/GDSC/lecture2.jpg" width='420' class='inline-block' style={{margin:'auto', padding:15}}/>
+
+## 專案實作
+
+在下學期的專案實作中，我們將組員拆分成兩半，一半承接上學期課程針對 **文件摘要** 的相關技術做進階討論，另一半則嘗試實現簡單的 **Chatbot**。
+身為文件摘要的成員之一，我們以讀書會的形式討論了許多議題，從傳統 extractive 方式 (e.g. TextRank) 到近代 abstractive 方式 (e.g. Seq2Seq) 或混合式的 Pointer Generator Network，以及結合 Seq2Seq 與 Bert 的 BART 模型。
+此外，也討論了一些實作細節，例如 R-drop 以及 Multi-Task Learning。
+
+最終礙於運算資源的限制 (CUDA out of memory)，很難訓練複雜且龐大的模型，僅能進行小規模測試。
+期望今年的成果能做為基石，讓未來學弟妹跟 Google 爭取到 Colab 免費運算資源，成功訓練出一個回答自然且準確的 summarization model。
+
+## 心得回顧
+
+過去數個月來，我們六個人懷著一股熱情，從零開始自學 NLP 技術。
+雖然大家或多或少都有一點 Deep Learning 的經驗，但能夠找到一群志同道合的人，自發性的規劃與學習是非常難得的體驗。
+我們身為 Core Member，需要比一般組員提前學習相關知識，每週都要開會討論課程安排與學習成果，非常考驗大家的毅力與合作能力。
+所幸這一屆的 GDSC 順利劃下句點，我們也在期末大會上順利發表成果。
+非常感謝這幾個月來小夥伴們不懈的努力，也非常感謝各組員溫馨的支持，讓我們 NLP 組能走到現在。
+
+隨著最近 ChatGPT 的發表，各種 AI 技術正如火如荼的展開，AGI 的目標似乎也不再遙不可及。
+期望這次的社群活動能成為彼此的養分，幫助我們到達更高的領域。
+最後感謝 Google 推廣如此有意義的活動，希望未來學生社群能日益茁壯。
+
+<img src="/static/images/2023/GDSC/title.jpg" width='500' />

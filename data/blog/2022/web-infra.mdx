@@ -1,0 +1,552 @@
+---
+title: 'Industry-Academia Collaboration: Internal Website Infrastructure'
+date: '2022-01-20'
+tags: ['Web']
+draft: false
+summary: 'Establishing a full-stack web architecture, including a web server, DNS server, database read-write separation, and more.'
+---
+![](/static/images/2022/web-infra/title.jpg)
+
+2021 年末至 2022 年初，我們研究室與某科技公司進行為期數個月的產學合作計畫。
+我有幸參與其中某個專案，目標是協助該公司將原先建構在 Amazon Web Services (AWS) 上的內部網站轉移至該公司的伺服器上。
+為此，我們建立了四人小組，分別負責前端、後端、資料庫與基礎建設。
+因為我具備工作站管理員的身份，並曾擔任新生訓練的主要負責人，對於網站全端架構皆有涉獵，決定負責建構基礎建設。
+
+在與對方 PM 討論後，我的任務依照優先度做劃分。先將 Server 與資料庫建好，讓其他人能盡快在平台上開發與測試，接著建立 DNS 與 mail server，最後再針對 load balance 與 cache 做進一步優化。
+因為我必須獨自完成整個專案開發的基礎建設，每週都會有明確的目標，以期能在過年前落實整個計畫。
+
+最終系統架構簡圖如下，總共動用研究室三台主機做開發與測試，從 DNS Server 開始一路到 Nginx 負載分流，透過 reverse proxy 連接到 Apache server (為了使用對方公司熟悉的模組)，再將前端 (React) 與後端 (Node.js) 作分離。
+後端會與 mail server 和 PostgreSQL server 服務相連，並將資料庫做讀寫分離與自動備份。
+後續章節將進一步介紹各項目的實作細節。
+
+![](/static/images/2022/web-infra/overview.png)
+
+## CentOS Server
+
+CentOS 是 Red Hat Enterprise 的免費版本，而一般常見的 Ubuntu 則是基於 Debian 的發行版。
+相較於 Ubuntu，CentOS 的更新頻率較低且更加穩定，比較常作為商業伺服器用途。
+CentOS 缺點是 2020 年 8 月 Red Hat 宣布終止更新，未來只剩付費版 RHEL。 [^1]
+
+[^1]: [CentOS Stream: Building an innovative future for enterprise Linux](https://www.redhat.com/en/blog/centos-stream-building-innovative-future-enterprise-linux)
+
+首先到 CentOS [官網載點](https://www.centos.org/download/) 下載需要的 OS 版本 (iso)，再透過 [Windows Rufus](https://rufus.ie/zh_TW/) 來製作 USB 開機碟。
+接著選擇一顆空硬碟，或是透過 Windows 「電腦管理」 > 「磁碟管理」 來分割、壓縮硬碟，選擇需要的大小來製作雙系統。
+然後電腦關機，插入 USB 開機碟，重新開機後按住 F12，選擇用 USB 來開機。
+
+安裝 CentOS，「軟體選擇」預設是「最小型安裝」，如果想體驗從頭開始什麼都沒有的 Linux shell 可以選這個，設定起來會比較複雜。
+一般新手我建議改裝「GNOME 桌面環境」，有 GUI 介面會比較好上手。
+
+在「安裝目的地」可以選「自動配置磁碟分割」，如果有其他需求也可以手動配置。網路如果有固定 IP 也可以在這邊都先設好。
+全部完成後按「開始安裝」，一路等它裝完就行。等到安裝完成，可以修改主機名稱並建立使用者帳號，接著更新系統套件並安裝 EPEL。
+EPEL 全名叫 Extra Packages for Enterprise Linux，是 Fedora 社群打造的擴充軟體包，比 Red Hat 官方預設的 RHEL 還多東西。
+
+```bash
+$ sudo yum upgrade
+$ sudo yum install epel-release
+$ sudo yum update
+```
+
+接著設定 SSH Server 與防火牆，或是手動關閉 SELinux (CentOS 內保護系統安全的機制，可以不關，但常常礙手礙腳)。
+```bash
+$ sudo yum install openssh openssh-server
+$ sudo vi /etc/ssh/sshd_config # 編輯設定檔
+...
+Port XXX # 你要開的 port，預設是 22
+AllowUsers user_1 user_2 # 設定要讓誰連入，也可以不設定(全部連入)
+ClientAliveInterval 60 # 讓使用者不要一直斷線
+ClientAliveCountMax 10
+...
+
+# 在 SELinux 啟用 ssh port 
+$ sudo semanage port -a -t ssh_port_t -p tcp XXX 
+$ sudo systemctl restart sshd # 重啟 ssh
+$ sudo systemctl enable sshd # 讓開機時自動啟用
+# 防火牆新增此 port
+$ sudo firewall-cmd --permanent --zone=public --add-port=XXX/tcp 
+# 更新防火牆
+$ sudo firewall-cmd --reload 
+or
+$ sudo systemctl restart firewalld
+
+# SELinux 開關
+$ sudo setenforce 0  # 暫時關閉
+$ sudo setenforce 1  # 暫時開啟
+$ sudo vi /etc/sysconfig/selinux  # 永久關閉
+...
+SELINUX=disabled  # <-- 修改這行
+...
+```
+
+## PostgreSQL Server
+本次使用的 PostgreSQL 資料庫，為了應付大量讀寫需求及資料毀損、故障等問題，分開架設在兩台主機上，前者作為主庫 Master Database (能讀寫)，後者為從庫 Slave Database (唯讀)，從庫會自動備份主庫的內容（每次寫入資料都進行同步）。
+而在資料庫 API 的部分，則設計讀取只用從庫、寫入只用主庫，進而達到讀寫分離與主從備份。
+
+首先安裝 PostgreSQL 12：
+```bash
+# 安裝 repository
+$ sudo yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+# 安裝 postgresql 12
+$ sudo yum install -y postgresql12-server
+# 初始化並設定開機自動啟動
+$ sudo /usr/pgsql-12/bin/postgresql-12-setup initdb
+$ sudo systemctl enable postgresql-12
+$ sudo systemctl start postgresql-12
+```
+以上會在 Linux 中新增一個使用者叫 postgres，其用戶目錄可能在 /var/lib/pgsql，或任何 PostgreSQL 的安裝路徑。
+因為預設的密碼是隨機的 (也有人說沒密碼，但我實測登不進去)，我們需要去修改帳戶密碼，才能在後續使用 md5 加密方式登入。
+
+```bash
+$ sudo -i -u postgres # 強制切換到 postgres 帳戶
+$ psql # 開啟 sql shell
+# 修改密碼
+postgres=# \password postgres
+postgres=# \q
+```
+
+接著進行主從分離設定，我們首先修改主庫 (master) 的連線：
+```bash
+$ sudo vi /var/lib/pgsql/12/data/pg_hba.conf 
+...
+host    all             all         0.0.0.0/0               md5
+host    replication     postgres    140.116.214.150/32      md5
+...                                 # 需要設定為從庫的ip/32
+
+$ sudo vi /var/lib/pgsql/12/data/postgresql.conf
+...
+listen_adresses = '*'
+wal_level = replica
+max_wal_senders = 2
+wal_keep_segments = 10 
+max_connections = 100
+...
+
+# 重啟 sql 並修改防火牆
+$ sudo systemctl restart postgresql-12
+$ sudo firewall-cmd --permanent --add-service=postgresql 
+$ sudo firewall-cmd --reload 
+```
+
+接著安裝從庫 (standby)。從庫安裝的過程中不需初始化，如果已經初始化過了，可以將 /var/lib/pgsql/12/data 資料夾刪除。
+我們接著將主庫的設定備份過來從庫，過程需要輸入 postgres 帳密：
+
+```bash
+# 連線到主庫ip，備份資料庫
+$ sudo pg_basebackup -h XXX.XXX.XXX.XXX -U postgres -Fp -Xs -Pv -R -D /var/lib/pgsql/12/data/
+# 修改用戶 postgres 用戶讀取權限
+$ sudo chown -R postgres:postgres /var/lib/pgsql/12/data
+$ sudo chmod -R 0700 /var/lib/pgsql/12/data
+
+# 修改從庫設定檔
+$ sudo vi /var/lib/pgsql/12/data/standby.signal
+standby_mode = 'on' # <--加入這行
+
+$ sudo vi /var/lib/pgsql/12/data/postgresql.conf
+...
+# wal_level = ...
+# max_wal_senders = ...
+# wal_keep_segments = ...
+primary_conninfo = 'host=XXX.XXX.XXX.XXX user=postgres password=XXX'
+recovery_target_timeline = latest 
+max_connections = 120 
+hot_standby = on
+max_standby_streaming_delay = 30s 
+wal_receiver_status_interval = 10s 
+hot_standby_feedback = on
+...
+
+$ sudo systemctl restart postgresql-12 # 重啟 sql
+```
+
+這樣即完成主從備份，我們可以在主、從終端輸入 `$ ps -ef | grep postgres` 來查看真的有 sender/receiver process，或是在主庫 sql shell 輸入 `select client_addr,sync_state from pg_stat_replication;` 來觀察連線情形。
+如果想直接使用 PostgreSQL 的 bin 指令，記得將路徑 /usr/pgsql-12/bin 加入系統的環境變數。
+
+- Master DataBase (write)
+![](/static/images/2022/web-infra/SQL-master.png)
+
+- Slave DataBase (read-only)
+![](/static/images/2022/web-infra/SQL-slave.png)
+
+- **補充 (一)**
+``` bash
+# master/pg_hba.conf 
+host    all    all    0.0.0.0/0    md5
+```
+以上這行意味著對「所有 postgresql 用戶」打開安全連線，但是我們預設的帳密通常是 postgres/postgres，很容易被他人猜到、攻擊。建議新增一個專用帳戶，把權限給他。
+```bash
+$ sudo -iu postgres psql
+# CREATE ROLE <user_name> WITH LOGIN PASSWORD '<password>';
+# ALTER ROLE <user_name> WITH <options>;
+```
+上文的 options 可以是 SUPERUSER 或其他存取權限。
+
+- **補充 (二)**  
+
+可以在 Client 端安裝 [pgAdmin](https://www.pgadmin.org/download/)，就可以利用 GUI 介面來操作遠端資料庫。
+
+![](/static/images/2022/web-infra/pgAdmin.png)
+
+## Web Server
+
+Web Server 使用 Nginx 與 Apache，各有其優點。Apache 開發時間比較早，相對穩定且套件眾多，適合處理動態頁面。
+與之相對，Nginx 輕量、效能高、設定簡單，更適合處理靜態頁面。
+其他也有像 NAMP 架構 (Nginx+Apache+Mysql+PHP)，讓 Nginx 處理前端靜態檔案，Apache 則處理後端動態需求。
+
+這次的系統架構僅讓 Nginx 負責負載分流，Apache 作為主要的 Web Server，Node.js 則作為 App Server 負責業務邏輯。
+因為主機不夠的關係，我們架設時暫時將 Nginx 與 Apache 放在同一台，透過 reverse proxy 將 Nginx 的 port 80 導向 Apache port 8000，再進一步導向 Node.js port 8080。
+
+### 基本設定
+
+首先安裝 Nginx Stable：
+```bash
+$ sudo yum install yum-utils
+$ sudo vi /etc/yum.repos.d/nginx.repo
+...
+[nginx-stable]
+name=nginx stable repo
+baseurl=http://nginx.org/packages/centos/$releasever/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=https://nginx.org/keys/nginx_signing.key
+module_hotfixes=true
+...
+$ sudo yum install nginx # 安裝 nginx stable 版
+$ sudo systemctl enable nginx # 永久啟用，讓開機後自動啟用
+$ sudo systemctl start nginx # 啟用服務
+$ sudo systemctl status nginx # 檢查是否成功啟用
+$ sudo firewall-cmd --permanent --add-service=http
+$ sudo firewall-cmd --reload
+```
+如果沒加上前面的 nginx repo，直接選擇 `$ yum install nginx`，就會安裝預設的 Nginx 版本。
+經本人實測也是穩定版，但不保證永遠如此。
+
+若要檢查是否安裝成功，可以輸入以下指令，代表 TCP 正在監聽 port 80 (http)。
+因為有一個預設檔案 /etc/nginx/nginx.conf.default 正在佔用 port 80，記得把它取消掉，否則 port 會被佔用。
+```bash
+$ sudo netstat -tlnp | grep nginx
+...
+tcp    0   0 0.0.0.0:80    0.0.0.0:*    LISTEN     XXXX/nginx: master  
+tcp6   0   0 :::80         :::*         LISTEN     XXXX/nginx: master
+```
+
+Nginx 資料夾中會有一個檔案叫 nginx.conf，用來作一些整體設定。
+設定檔一開始有幾個參數，通常不用管它，按預設就好。底下有兩個主要的 block： event、http。
+events 是用來設定處理連線的方式，通常預設就好；http 則主要有三層：
+```
+events {
+    worker_connections 768; # 設定最大連線數量
+    multi_accept off; # 是否要一次接受全部連線，不設就是自動匹配
+}
+http {
+    # 放一些基礎設定，如 SSL、Gzip
+    ...
+    server { 
+        # 放一些 server 設定，如 port
+        ...
+        location /... {
+        # 放一些 routing 設定
+    }
+}
+```
+
+在 nginx.conf/http 中會設定 Virtual Host：
+```txt
+include /etc/nginx/conf.d/*.conf;
+include /etc/nginx/default.d/*.conf;
+```
+這就是 Nginx 的模組化設計。
+如果我們回到 nginx 資料夾，可以見到底下有另一個資料夾叫 conf.d，用來作個別網站的 server 設定。
+例如在 conf.d 中建立一個 config 檔，如 default.conf：
+```
+server {
+    listen   80;        # IPV4
+    listen   [::]:80;   # IPV6
+    server_name  www.example.com; # 網域名稱
+
+    location / {
+        proxy_pass http://127.0.0.1:8000; # reverse proxy
+   }
+}
+```
+
+### 負載均衡
+
+在 default.conf 中，可以進一步設定要 reverse proxy 至哪一台 IP 或 Port、分流比重多少，以及要用什麼演算法來做 loading distribution。
+```
+upstream my_app {
+    
+    # 這裡開了兩個 port，但也可以是兩台不同 ip 的主機，或是同一台主機的不同路徑
+    server 140.116.214.155:3000 weight=1;
+    server 140.116.214.155:3001 weight=3;
+
+    ip_hash; # balancing algorithm
+}
+
+server {
+
+    listen 80;
+    server_name www.example.com;
+
+    location /project_1/ {
+        proxy_pass http://my_app/; # 讀入上方的 upstream 設定
+    }
+}
+```
+
+如果不設定 balancing algorithm，預設是 round robin。也可以設定 least_conn、ip_hash、hash（需提供資料）。
+此處設定由 Port 8000 reverse proxy 至 Node.js server 的 Port 8080：
+```bash
+$ sudo yum install httpd # 安裝 apache
+$ sudo vi /etc/httpd/conf/httpd.conf
+...
+Listen 8000 # port 80 如果有衝到要改掉
+IncludeOptional conf.d/*.conf # 最下面應該有這行來 include conf.d
+...
+$ sudo vi /etc/httpd/conf.d/vhost.conf # 開一個 Virtual Host 專用設定
+...
+<VirtualHost *:8000>
+    ProxyRequests On
+    ProxyPass / http://127.0.0.1:8080/ # node.js server
+    ProxyPassReverse / http://127.0.0.1:8080/
+    DocumentRoot “/home/cosbi/project/" # 你的專案路徑
+    <Directory "/home/cosbi/project/">
+      Require all granted
+    </Directory>
+</VirtualHost>
+...
+$ sudo semanage port -a -t http_port_t -p tcp 8000
+$ sudo systemctl enable httpd
+$ sudo systemctl start httpd
+```
+
+## Apache Cache
+當我們已經跟後端請求過某個資源，例如某筆資料或某張圖片，下一次再次請求時，如果該資源沒有改變，這時再次請求會相對浪費網路頻寬；
+反之，如果第一次請求來的資源已經被存下來，那麼下次請求時，可以直接用該資源，這樣可以減少不必要的請求，這就是 HTTP caching 的概念。
+
+在 Apache 中，我們可以使用 mod_cache，或是 mod_cache_disk、mod_cache_socache 等模組來實作 cache。
+首先設置 htcacheclean，讓它在 Apache 啟動時跟著啟動並定期清理緩存：
+```bash
+$ sudo mkdir -p /etc/systemd/system/httpd.service.requires
+$ sudo ln -s /usr/lib/systemd/system/htcacheclean.service /etc/systemd/system/httpd.service.requires          # soft link
+$ sudo vim /etc/sysconfig/htcacheclean # 以下都是預設值（未更動）
+...  
+INTERVAL=15                            # 每隔 15 分鐘清理一次緩存
+CACHE_ROOT=/var/cache/httpd/proxy      # 緩存路徑
+LIMIT=100M                             # 緩存上限 100M
+...
+```
+
+接著設置 Apache 緩存相關設定：
+```bash
+$ sudo vim /etc/httpd/conf/httpd.conf
+...
+CacheRoot /var/cache/httpd/proxy # 下面通常不用改
+CacheDirLevels 2                 # subdirectory number of Hash directory
+CacheDirLength 1                 # subdirectory length
+...
+
+$ sudo vim /etc/httpd/conf.d/vhost.conf
+...
+# 參考下下頁
+...
+$ sudo apachectl configtest      # 檢查設定是否正確
+$ sudo systemctl restart httpd   # 重啟 Apache
+```
+
+An md5 hash of the URL will be created as the key used to store the data：
+![](/static/images/2022/web-infra/md5-hash.png)
+
+將 cache 資料以 hash 方式存取：
+![](/static/images/2022/web-infra/cache.png)
+
+以下是 cache 的設定範例：
+```txt
+CacheQuickHandler off # 先做 conditional checking（eg.身份驗證）
+CacheLock on          # avoid thundering herd when validating cache
+CacheLockPath /tmp/mod_cache-lock
+CacheLockMaxAge 5     # lock 5 sec
+CacheIgnoreHeaders Set-Cookie    # 不要存到 cookie
+
+<Location />
+CacheEnable disk           # 實際儲存 cache 內容
+CacheHeader on
+                           # 如果沒有 Expires、Last-Modified header
+CacheDefaultExpire 600     # 預設過期 600 sec (10 min)
+CacheMaxExpire 86400       # 最大 86400 sec (1 day)
+CacheLastModifiedFactor 0.5 # 從 last-modified 計算 expiry period
+
+ExpiresActive on           # 用 mod_expires 設置 Cache-Control
+ExpiresDefault "access plus 5 minutes”
+
+Header merge Cache-Control public
+FileETag All               # i-node、last modified time、size
+</Location>
+```
+
+## DNS Server
+
+網域名稱系統 (Domain Name System, DNS) 可以將人類可辨識的網域名稱 (如 www.google.com) 轉換成機器可讀取的 IP 位置 (如 8.8.8.8)。
+架設自己的 DNS Server 可以對自己網域下的名稱有完全的掌控權，不用過度依賴上級機構 (例如我想將網站架設在 ee.ncku.edu.tw 底下，就需要跟成大電機系申請 domain name)。
+另外，DNS Server 也可以透過適當的設定，將同一個 domain name 導向不同的 IP address，達到負載均衡的效果。
+
+以架設 DNS server `csblab` 在電機系網域為例，我們首先需要安裝 bind：
+```bash
+$ sudo yum install bind
+
+$ sudo vi /etc/named.conf
+...
+options {
+    # 修改這兩行，對外全開
+    listen-on port 53 { any; };
+    allow-query     { any; };
+…
+
+# 建立一個正解的 zone
+zone "csblab.ee.ncku.edu.tw" IN {
+        type master;
+        file "forward.csblab"; # 自訂檔案名稱
+        allow-update { none; };
+};
+
+# 建立一個反解的 zone
+zone "XXX.XXX.140.in-addr.arpa" IN {
+        type master;
+        file "reverse.csblab";
+        allow-update { none; };
+};
+```
+
+在 IP 正解設定設定中，可以於同一個名稱下放很多不同的主機 IP，DNS 會以 **roud robin** 的方式輪替指派不同 IP 給 request：
+```bash
+$ sudo vi /var/named/forward.csblab
+
+# 基礎設定
+$TTL    600
+@       IN      SOA     dns1.csblab.ee.ncku.edu.tw. ( 20211220 1D 12H 1W 1D )
+@       IN      NS      dns1.csblab.ee.ncku.edu.tw.
+
+# 對應網站
+dns1    IN      A       140.XXX.XXX.XXX
+web1    IN      A       140.XXX.XXX.XX1 # 可以在同一個網址中放很多不同IP
+        IN      A       140.XXX.XXX.XX2
+...
+```
+
+接著進行反解設定如下：
+```bash
+$ sudo vi /var/named/reverse.csblab
+
+$TTL 600
+@       IN      SOA     dns1.csblab.ee.ncku.edu.tw. ( 20211220 1D 12H 1W 1D )
+@       IN      NS      dns1.csblab.ee.ncku.edu.tw.
+@       IN      PTR     csblab.ee.ncku.edu.tw.
+
+XXX     IN      PTR     dns1.csblab.ee.ncku.edu.tw.
+XX1     IN      PTR     web1.csblab.ee.ncku.edu.tw.
+```
+
+設定完後記得開啟防火牆與重啟 DNS：
+```bash
+$ firewall-cmd --permanent --add-port=53/tcp
+$ firewall-cmd --permanent --add-port=53/udp
+$ sudo firewall-cmd --reload
+$ sudo systemctl restart named
+```
+
+之後便可以透過 `nslookup web1.csblab.ee.ncku.edu.tw` 查詢到我們預期的 IP address。  
+最後我們進行 SSL 設定。下載 certbot-nginx，這是一個自動註冊 Let's Encrypt 的套件：
+```bash
+$ sudo yum install certbot-nginx
+$ sudo certbot --nginx -d <example.com>
+```
+之後會需要輸入信箱並同意相關政策，設定完後會自動在你的 server config 內新增 SSL 相關敘述，並把網址導向 port:443，記得開啟防火牆。
+
+若要讓 SSL 自動更新，我們可以使用系統的 cron 套件來排程指令：
+```bash
+$ sudo crontab -e
+...
+15 3 * * * /usr/bin/certbot renew --quiet
+```
+在每天 3:15 自動檢查憑證是否快過期，並於 30 天內自動更新。
+
+## Mail Server
+
+郵件發送需要從本地端 MUA (Mail User Agent) 送到 MTA (Mail Transfer Agent) 處理，再經由 MDA (Mail Delivery Agent) 轉遞 (relay) 到對方的 MTA。
+相關流程如下圖，圖片取自鳥哥的伺服器架設教學文。 [^2]
+
+[^2]: [鳥哥 伺服器架設篇-CentOS 6.x：郵件伺服器](https://linux.vbird.org/linux_server/centos6/0380mail.php)
+
+<img src="/static/images/2022/web-infra/MDA.png" width='400' />
+
+收發信件所使用的通訊協定是 **SMTP** (Simple Mail Transfer Protocol)，所以 MTA Server 就是 SMTP Server。
+
+郵件接收需要本地端 MUA 與 MTA 溝通，透過 MRA (Mail Retrieval Agent) 將郵件從 MTA 載下來。相關流程如下圖。
+
+<img src="/static/images/2022/web-infra/MRA.png" width='400' />
+
+將信件下載到 MUA 所用的通訊協定是 **POP3** (Post Office Protocol)、**IMAP** (Internet Message Access Protocol) ，所以若要收信也需要 MRA Server。
+
+首先架設 MTA Server。由於 CentOS 7 已內建 Postfix，其主要提供的就是 SMTP 功能，所以不需要再安裝其他軟體。
+在設定之前，我們先確認 DNS 上有紀錄 MX 訊息：
+```bash
+$ sudo vim /var/named/forward.csblab
+...
+$TTL    600
+
+@       IN      SOA     dns1.csblab.ee.ncku.edu.tw. ( 20211220 1D 12H 1W 1D )
+@       IN      NS      dns1 dns1.csblab.ee.ncku.edu.tw.
+@       IN      MX      10      mail.csblab.ee.ncku.edu.tw.  # <--這個
+
+dns1    IN      A       140.XXX.XXX.XXX
+mail    IN      A       140.XXX.XXX.XXX  # <--這個
+...
+```
+
+接著我們修改 Postfix 主要配置檔：
+```bash
+$ sudo vim /etc/postfix/main.cf
+...
+myhostname = mail.csblab.ee.ncku.edu.tw # line 75
+mydomain = csblab.ee.ncku.edu.tw # line 83
+myorigin = $myhostname # line 98
+inet_interfaces = all # line 113，其他註解掉
+inet_protocols = ipv4 # line 119
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain 
+# line 165
+mynetworks = 127.0.0.0/8, 140.XXX.XXX.0/24 # line 269 這邊設定學校的網域
+relay_domains = $mydestination # ine 296
+...
+$ sudo systemctl  restart  postfix
+$ sudo systemctl  enable  postfix
+```
+
+接著架設 MRA Server，需要安裝並設定 Dovecot 這個軟體：
+```bash
+$ sudo yum install dovecot
+$ sudo vim /etc/dovecot/dovecot.conf
+...
+protocols = imap pop3 # line 24
+...
+
+$ sudo systemctl restart dovecot
+$ sudo systemctl enable dovecot
+```
+
+設定完成後重啟。我們可以試著透過 MUA 軟體來發一封 mail 作測試：
+```bash
+$ mail XXXX@gmail.com  # 你的 mail
+Subject: Test          # 標題
+This is a test.        # 內文
+.                      # 結束符號
+```
+<img src="/static/images/2022/web-infra/mail.png" width='400' />
+
+若 mail server 未經過驗證，可能會被視為垃圾郵件，要去垃圾信箱裡尋找。
+
+## 心得
+這個專案雖然只有短短一個半月的時間，但是能夠從最底層 Linux Server  一路架設至 Web Server，包含 SQL server、DNS server、mail server 等各種服務，都是相當寶貴的經驗。
+此外，透過每週不斷與 PM 開會，可以即時回報進度，確認架設的方向與細節是否正確，並得到立即的反饋。
+這一來一往的過程，我們不斷討論各種議題，例如為什麼要額外架設 Apache？希望用什麼手段達到 load balance？希望拆分幾台主機？希望如何進行資料備份？
+這些都可以讓我更加了解企業的需求，跳脫一般學術網站的思維，從網站底層到上層都能獲得充分的認知。
+
+此外，非常感謝專案組員彼此之間的默契與協調。Web Infrastructure 必須走在大家的前面，先鋪好路才能讓網站進行開發與測試。
+這讓我除了與 PM 對話，還必須跟組員充分討論各自的需求、調整任務的優先度，這也是相當難能可貴的經驗。
