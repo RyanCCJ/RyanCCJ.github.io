@@ -6,6 +6,49 @@ interface Project {
 }
 
 const projectsData: Project[] = [
+  /*
+  {
+    title: 'Web and Cloud Development',
+    description: `Full-stack projects include data analysis tools and social platforms, utilizing diverse technologies and frameworks. 
+    Experience scalable infrastructure design and cloud services integration.`,
+    imgSrc: '/static/images/2024/sRNA_Analyst/title.jpg',
+    href: '',
+  },
+  {
+    title: 'Bioinformatics Data Analysis',
+    description: `Since the advent of NGS sequencing technology, research in the field of RNA has been thriving. 
+    We have published a series of papers exploring the relationship of small RNA binding and introducing novel perspectives.`,
+    imgSrc: '/static/images/2024/RNAseq-Analysis-Toolkit/RNA.jpg',
+    href: '',
+  },
+  {
+    title: 'Machine and Deep Learning',
+    description: `With the rise of AI technology, I have participated in numerous projects. 
+    These include deep learning based on image recognition, applications of large language models, and involvement in various communities.`,
+    imgSrc: '/static/images/2024/LLM/LLM3.png',
+    href: '',
+  },
+  {
+    title: 'Embedded and Hardware Design',
+    description: `I have researched circuit design in energy harvesting and wireless power transfer. 
+    I also collaborated with the Industrial Design Department to develop a smart dumbbell, which was presented at an IEEE conference.`,
+    imgSrc: '/static/images/2018/WPT/title.jpg',
+    href: '',
+  },
+  {
+    title: 'Game Development',
+    description: `I developed a simple RPG game using Java and also created a Big Two card game robot using C.`,
+    imgSrc: '/static/images/project/RPG.png',
+    href: 'https://github.com/RyanCCJ/Light-RPG',
+  },
+  {
+    title: 'Outdoor Activities',
+    description: `During my time in the mountaineering club, 
+    I participated in numerous training programs and also took part in mountain and canyon rescue operations.`,
+    imgSrc: '/static/images/outdoor/canyoning.jpg',
+    href: 'blog/outdoor',
+  },
+  */
   {
     title: 'sRNA Analyst',
     description: `Biologists have always been curious about gene regulation mechanisms, 
