@@ -157,7 +157,7 @@ DeepSeek 自己開發了 DualPipe 演算法，將資料「運算」與「傳輸�
 ### Cross-Node All-to-All Communication
 DeepSeek V3 使用大量的 H800 來組成叢集，每個節點有 8 個 GPU。
 節點內部透過 NVLink 和 NVSwitch 連結 (160 GB/s)，節點之間則透過 InfiniBand (IB) 連接 (50 GB/s)。
-為了避免 IB traffic，DeepSeek 限制每個 token 只能分配至 4 個 nodes；
+為了避免 IB traffic，DeepSeek 限制每個 token 只能分配至 4 個 nodes，
 並透過 warp specialization technique [^12] 與改寫 PTX 指令（CUDA 底層），讓 NVLink 與 IB 的傳輸可以重疊，使兩者的頻寬可以被充分使用。
 理想上，NVLink 的頻寬是 IB 的 160 / 50 = 3.2 倍，代表最多可以同時有 3.2 * 4 = 12.8 個 MoE 專家被選擇（實際上 8 個）。
 這麼做可以大幅增加 GPU 之間溝通的效率。
