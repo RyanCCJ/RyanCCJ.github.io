@@ -3,7 +3,7 @@ const siteMetadata = {
   title: "Ryan's Blog",
   author: 'Ryan Chung',
   headerTitle: "Ryan's Blog",
-  description: 'A blog about travels, mountaineering, and programming',
+  description: 'Stay Hungry, Stay Foolish',
   language: 'en-us',
   theme: 'dark', // system, dark or light
   siteUrl: 'https://ryanccj.github.io',
