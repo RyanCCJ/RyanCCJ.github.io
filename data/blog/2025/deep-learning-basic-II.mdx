@@ -6,8 +6,9 @@ draft: false
 summary: 'Deep Learning 系列文第二章，著重在影像辨識的技術原理'
 ---
 
-<img src="/static/images/2025/deep-learning-basic/ch2/cover.jpg" style={{margin:'auto'}}/>
-<center><small>電腦視覺有豐富的應用：物件偵測、文字辨識、醫療檢測、圖像分割等</small></center>
+<img src="/static/images/2025/deep-learning-basic/ch2/cover.png" style={{margin:'auto'}}/>
+<center><small>電腦視覺有豐富的應用：物件偵測、文字辨識、醫療檢測、圖像分割等 [^30]</small></center>
+[^30]: Viso.ai, "The 100 most popular computer vision applications," URL: https://viso.ai/applications/computer-vision-applications/
 
 ## 目錄
 
@@ -479,7 +480,7 @@ result_image = results[0].plot()
 當影片能夠被即時分析，電腦視覺甚至開始跨足到車用輔助駕駛 (Advanced Driver Assistance Systems, ADAS) 和機器人視覺辨識的領域。
 
 除了影像，卷積神經網路也被廣泛用於各種可以抽象拆解為二維特徵的問題。
-例如 Google DeepMind 發表的 [AlphaFold](https://deepmind.google/science/alphafold/) [^26]，就是將胺基酸之間的距離和接觸可能性表示成矩陣，再搭配一些領域知識來預測蛋白質結構。
+例如 Google DeepMind 發表的 [AlphaFold](https://deepmind.google/science/alphafold/) [^26]，就是將胺基酸之間的距離和接觸可能性表示成矩陣，再搭配領域知識來預測蛋白質結構。
 雖然在 AlphaFold2 [^27] 改轉向 Transformer 架構，但依舊保有 CNN 的設計理念。
 
 [^26]: Andrew W. Senior, et al. "Improved protein structure prediction using potentials from deep learning." Nature 577.7792 (2020): 706-710.
